@@ -1,0 +1,914 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "Reverse Geocoding API",
+    "description": "API documentation for reverse geocoding (address from coordinates: nearest object, distance to it, administrative hierarchy with a per-level reliability flag, plus a nearby mode returning landmark objects within a radius). Coverage is limited to Russia. Requests with no result are not charged.\n\n### Authorization\n\nEvery method requires an API key in the request header:\n\n```\nAuthorization: Bearer ak_your_key\n```\n\nKeys are created in your account, section [API keys](https://atlorium.com/Account/Manage/ApiKeys).\nThe API has no guest access: a request without a key returns 401.\n\n### Sandbox\n\nThe key `ak_sandbox_demo_mockdata_v1` works without registration and is never charged — it\nreturns realistic demo data and marks the response with the `X-Atlorium-Sandbox: true` header.\nUse it to validate your response parsing before plugging in a real key.\n\n### Billing\n\nCredits are charged **only for a successful response**. Rejections (400, 401, 402, 429, 5xx)\nare never charged. Prices and free quotas are on the [pricing page](https://atlorium.com/pricing);\nthe balance is topped up in your [account](https://atlorium.com/Account/Manage/Billing).\n\n### Errors\n\nEvery rejection returns **the same JSON structure** — see the `ApiError` schema at the bottom\nof this page. There is no need to parse a different shape per status code: the machine-readable\nreason always lives in the `error` field.\n\n### Useful links\n\n* [Service overview](https://atlorium.com/rgeoDescription) — what it does, where the data comes from, what it does not cover\n* [Web interface](https://atlorium.com/rgeoGUI) — the same lookups by hand, no key required\n* [Pricing and limits](https://atlorium.com/pricing)\n* [Account: API keys](https://atlorium.com/Account/Manage/ApiKeys)\n* [Account: balance and payments](https://atlorium.com/Account/Manage/Billing)\n* [Blog](https://atlorium.com/blog)\n* [Report a problem](https://atlorium.com/bug-report) · [support@atlorium.com](mailto:support@atlorium.com)\n* [Terms of Service](https://atlorium.com/terms-of-service) · [Privacy policy](https://atlorium.com/privacy-policy)",
+    "termsOfService": "https://atlorium.com/terms-of-service",
+    "contact": {
+      "name": "Atlorium",
+      "url": "https://atlorium.com/bug-report",
+      "email": "support@atlorium.com"
+    },
+    "license": {
+      "name": "Proprietary — see Terms of Service",
+      "url": "https://atlorium.com/terms-of-service"
+    },
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Current server"
+    }
+  ],
+  "paths": {
+    "/api/geocodereverse": {
+      "get": {
+        "tags": [
+          "Reverse Geocoding API"
+        ],
+        "summary": "Finds the nearest address for the given coordinates and adds the requested enrichments.",
+        "description": "A simple request (one unit of work):\nGET /api/geocodereverse?lat=55.788226&lon=49.121984\n\nA request with enrichments (up to four units of work):\nGET /api/geocodereverse?lat=55.788226&lon=49.121984&includeNeighbors=true&includeAdmin=true&includeNearby=true\n\nWHY NEIGHBOURING HOUSES. The answer to \"what is the address here\" is ONE object — the\nnearest. But a point often sits between two buildings or at the end of a long one, and\nthe automatic choice is then debatable. Neighbours let you resolve the doubt by hand\nwithout issuing a second request with a different radius.\n\nWHY BOUNDARY MEMBERSHIP. It is computed by testing whether the point falls inside a\npolygon, not inferred from the house that was found. Otherwise a point in an empty field\nwould inherit the district of the nearest village twenty kilometres away.\n\nWHAT HAPPENS WHEN AN ENRICHMENT IS EMPTY. The field is simply left unfilled and its unit\nof work is not charged: the request still succeeds, because the base answer was obtained.\n\nBILLING. See the billedUnits field of the response: it holds exactly what was charged.",
+        "parameters": [
+          {
+            "name": "lat",
+            "in": "query",
+            "description": "Latitude in degrees. For Russia roughly 41 to 82.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double"
+            }
+          },
+          {
+            "name": "lon",
+            "in": "query",
+            "description": "Longitude in degrees.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double"
+            }
+          },
+          {
+            "name": "includeNeighbors",
+            "in": "query",
+            "description": "Also return the next closest houses. Adds one unit of work.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "neighborsSize",
+            "in": "query",
+            "description": "How many neighbouring houses to return. Only effective together with includeNeighbors.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 5
+            }
+          },
+          {
+            "name": "includeAdmin",
+            "in": "query",
+            "description": "Return the administrative units whose boundaries contain the point. Adds one unit of work.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "includeNearby",
+            "in": "query",
+            "description": "Return the landmarks around the point: shops, pharmacies, stops. Adds one unit of work.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "nearbyRadiusKm",
+            "in": "query",
+            "description": "Landmark search radius in kilometres. Only effective together with includeNearby.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double",
+              "default": 1
+            }
+          },
+          {
+            "name": "nearbySize",
+            "in": "query",
+            "description": "How many landmarks to return. Only effective together with includeNearby.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success. Returns the address and the requested enrichments.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodeReverseResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodeReverseResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodeReverseResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Coordinates are out of range, or the landmark radius is not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The API key is missing, expired or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Not enough credits on the balance to run the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There are no address objects near the point. Not charged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "not_found",
+                  "title": "Ничего не найдено",
+                  "message": "По запросу «GET /api/…» данных нет. Если сомневаетесь в адресе метода — сверьтесь со спецификацией: /openapi/{идентификатор_сервиса}_ru.json.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded. Retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "in 42 seconds"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The geocoding service is temporarily unavailable. Not charged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "maintenance",
+                  "title": "Проводятся плановые работы",
+                  "message": "Выполнение запросов временно приостановлено на время плановых работ. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/geocodereverse/nearby": {
+      "get": {
+        "tags": [
+          "Reverse Geocoding API"
+        ],
+        "summary": "Returns the landmarks around a point: shops, pharmacies, stops, filling stations.",
+        "description": "Example request:\nGET /api/geocodereverse/nearby?lat=55.788226&lon=49.121984&radiusKm=1&size=10\n\nTHIS IS NOT A LIST OF NEIGHBOURING HOUSES. The mode answers \"what is here\": businesses\nand urban objects. Neighbouring houses are an enrichment of reverse geocoding (the\nincludeNeighbors parameter) and are priced differently.\n\nCOMPLETENESS IS NOT GUARANTEED, and this matters. Object data is put on the map by\nvolunteers: coverage is dense in large cities and sparse in small settlements and along\nhighways. The absence of an object from the response does NOT mean it does not exist.\nA warning about this travels in every successful response as completenessNotice — show\nit to your user, otherwise they will draw the wrong conclusion.\n\nWHY THE RADIUS IS CAPPED AT TEN KILOMETRES. The limit is semantic rather than technical:\na hundred-kilometre radius is no longer \"what is nearby\" but a paged map export.\n\nBILLING. One unit of work per request. An empty result (404) is not charged.",
+        "parameters": [
+          {
+            "name": "lat",
+            "in": "query",
+            "description": "Latitude of the search centre in degrees.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double"
+            }
+          },
+          {
+            "name": "lon",
+            "in": "query",
+            "description": "Longitude of the search centre in degrees.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double"
+            }
+          },
+          {
+            "name": "radiusKm",
+            "in": "query",
+            "description": "Search radius in kilometres. Maximum is 10.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double",
+              "default": 1
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "description": "How many objects to return.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success. Returns the landmarks found with the distance to each.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodeNearbyResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodeNearbyResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodeNearbyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Coordinates are out of range, or the radius exceeds the limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The API key is missing, expired or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Not enough credits on the balance to run the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No objects were found within the radius. Not charged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "not_found",
+                  "title": "Ничего не найдено",
+                  "message": "По запросу «GET /api/…» данных нет. Если сомневаетесь в адресе метода — сверьтесь со спецификацией: /openapi/{идентификатор_сервиса}_ru.json.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded. Retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "in 42 seconds"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The geocoding service is temporarily unavailable. Not charged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "maintenance",
+                  "title": "Проводятся плановые работы",
+                  "message": "Выполнение запросов временно приостановлено на время плановых работ. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "title": "API error",
+        "required": [
+          "error",
+          "title",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Machine-readable reason code. Possible values:\n\n* `server_error` (500) — Сервис временно недоступен\n* `unauthorized` (401) — Требуется вход\n* `api_key_required` (401) — Нужен API-ключ\n* `account_not_activated` (402) — Аккаунт не активирован\n* `rate_limited_client` (429) — Слишком много запросов\n* `rate_limited_global` (429) — Высокая нагрузка на сервис\n* `provider_keys_exhausted` (429) — Сервис временно недоступен\n* `insufficient_credits` (402) — Недостаточно кредитов\n* `guest_quota_exhausted` (402) — Бесплатный лимит на сегодня исчерпан\n* `service_disabled` (503) — Проводятся плановые работы\n* `maintenance` (503) — Проводятся плановые работы\n* `guest_not_allowed` (402) — Нужна регистрация\n* `service_not_in_account_terms` (403) — Сервис не подключён\n* `bad_request` (400) — Некорректный запрос\n* `forbidden` (403) — Доступ запрещён\n* `not_found` (404) — Ничего не найдено\n* `method_not_allowed` (405) — Метод HTTP не поддерживается\n* `unsupported_media_type` (415) — Формат запроса не поддерживается\n* `not_implemented` (501) — Режим пока не реализован",
+            "example": "insufficient_credits"
+          },
+          "title": {
+            "type": "string",
+            "description": "Short title for a user interface.",
+            "example": "Insufficient credits"
+          },
+          "message": {
+            "type": "string",
+            "description": "Detailed explanation: what happened and what to do about it. Shown to the user as is."
+          },
+          "balance": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Current balance in credits. Filled in on 402 so that no extra balance request is needed; null otherwise."
+          },
+          "retryAfterSeconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "How many seconds to wait before retrying. Mirrors the Retry-After HTTP header. null when retrying will not help (for example, out of credits)."
+          },
+          "retryAfterText": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The same delay as a ready-to-show phrase. Saves clients from formatting it themselves."
+          }
+        },
+        "description": "A single response body for every rejection: validation errors, a missing key, an exhausted limit. Branch on the `error` field — it is a stable machine-readable code. `title` and `message` are meant for humans and their wording may change."
+      },
+      "GeocodeAdminHierarchy": {
+        "type": "object",
+        "properties": {
+          "region": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Субъект Российской Федерации — область, край, республика, город федерального значения."
+          },
+          "county": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Район субъекта или муниципальное образование — так, как записано в реестре."
+          },
+          "locality": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Населённый пункт — город, посёлок, село."
+          },
+          "street": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Улица (или иной адресообразующий элемент: проспект, переулок, микрорайон)."
+          },
+          "isEmpty": {
+            "type": "boolean",
+            "description": "true, если не заполнен ни один уровень — иерархии по объекту нет."
+          }
+        },
+        "description": "Административная иерархия объекта ИЗ РЕЕСТРА: что записано в его официальном адресе."
+      },
+      "GeocodeAdminMembership": {
+        "required": [
+          "name",
+          "certainty"
+        ],
+        "type": "object",
+        "properties": {
+          "placeId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Идентификатор образования. По нему можно запросить карточку объекта и его границу в GeoJSON."
+          },
+          "name": {
+            "type": "string",
+            "description": "Название: «Республика Татарстан», «Казань», «Вахитовский район»."
+          },
+          "kind": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Тип объекта в сокращении, как он записан в реестре: «г», «р-н», «респ»."
+          },
+          "level": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Уровень в иерархии реестра: 1 — субъект РФ, 2–4 — районы и муниципальные образования,\n5–6 — населённые пункты. Список отсортирован по возрастанию уровня, от общего к частному.",
+            "format": "int32"
+          },
+          "certainty": {
+            "type": "string",
+            "description": "На чём основан ответ. Значение boundary означает «точка внутри полигона границы» —\nэто проверяемый факт, а не оценка."
+          }
+        },
+        "description": "Административное образование, ВНУТРИ ГРАНИЦ которого физически лежит запрошенная точка."
+      },
+      "GeocodeMatch": {
+        "required": [
+          "point",
+          "layer",
+          "precision"
+        ],
+        "type": "object",
+        "properties": {
+          "placeId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Стабильный идентификатор объекта в государственном реестре адресов."
+          },
+          "label": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Готовая однострочная запись адреса — то, что показывают пользователю."
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Собственное имя объекта: название улицы или номер дома, смотря что найдено."
+          },
+          "houseNumber": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Номер дома вместе с корпусом или строением, если они есть."
+          },
+          "street": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Улица (или иной адресообразующий элемент)."
+          },
+          "postalCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Почтовый индекс из реестра."
+          },
+          "point": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GeoPoint"
+              }
+            ],
+            "description": "Координаты объекта."
+          },
+          "layer": {
+            "type": "string",
+            "description": "Что именно найдено: address — дом, street — улица, locality —\nнаселённый пункт, county — район, region — субъект РФ."
+          },
+          "precision": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GeocodePrecision"
+              }
+            ],
+            "description": "Чья это координата. См. GeocodePrecision."
+          },
+          "admin": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GeocodeAdminHierarchy"
+              }
+            ],
+            "description": "Административная иерархия объекта из реестра."
+          },
+          "parentPlaceId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Идентификатор родительского объекта: для дома — улица или населённый пункт, для улицы —\nнаселённый пункт. По нему запрашивается граница вышестоящего образования."
+          },
+          "distanceKm": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Расстояние от запрошенной точки до объекта, километры. Заполняется только там, где запрос\nбыл точкой, — в обратном геокодинге.",
+            "format": "double"
+          }
+        },
+        "description": "Один найденный адресный объект: координаты, разобранный адрес, реестровая иерархия и —\nобязательно — уровень точности координаты."
+      },
+      "GeocodeNearbyResponse": {
+        "required": [
+          "query",
+          "radiusKm",
+          "places",
+          "completenessNotice",
+          "attribution"
+        ],
+        "type": "object",
+        "properties": {
+          "query": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GeoPoint"
+              }
+            ],
+            "description": "Центр поиска."
+          },
+          "radiusKm": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Радиус поиска, километры.",
+            "format": "double"
+          },
+          "places": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeocodePoi"
+            },
+            "description": "Найденные ориентиры, ближайший первым."
+          },
+          "completenessNotice": {
+            "type": "string",
+            "description": "Постоянное предупреждение о природе данных: сведения об объектах наносят на карту\nдобровольцы, поэтому отсутствие объекта в ответе не означает, что его нет в реальности."
+          },
+          "attribution": {
+            "type": "string",
+            "description": "Строка указания источника данных. Отображать обязательно."
+          }
+        },
+        "description": "Ответ режима «что рядом»."
+      },
+      "GeocodePoi": {
+        "required": [
+          "name",
+          "point"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Название объекта, как оно нанесено на карту."
+          },
+          "kind": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Категория объекта. Список ЗАКРЫТЫЙ, значения по-русски и в нижнем регистре:\nаптека, медицина, образование, банк, кафе и рестораны,\nзаправка, почта, транспорт, магазин,\nдостопримечательность, отдых и спорт, офис, прочее."
+          },
+          "point": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GeoPoint"
+              }
+            ],
+            "description": "Координаты объекта."
+          },
+          "distanceKm": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Расстояние от запрошенной точки, километры.",
+            "format": "double"
+          }
+        },
+        "description": "Ориентир рядом с точкой: магазин, аптека, остановка, школа."
+      },
+      "GeocodePrecision": {
+        "enum": [
+          "exact",
+          "range",
+          "street",
+          "locality",
+          "area",
+          "none"
+        ],
+        "description": "Чья это координата — то есть насколько точно она указывает на запрошенный объект. Поле\nобязательное к прочтению: одна и та же пара чисел с разным уровнем точности означает\nсовершенно разное.\n\nЗначения:\n* `Exact` — Координата ЭТОГО САМОГО дома, взятая из данных. Годится для любой задачи, включая доставку до подъезда.\n* `Range` — Номер дома ВЫЧИСЛЕН, а не найден: геокодер знает координаты соседних домов на улице и расположил искомый между ними — либо совпадение оказалось неполным (спрашивали «13к2», в реестре дом заведён одной записью «13»). Практический смысл: попасть на нужную сторону улицы и в нужный квартал такой результат позволяет, указать конкретное здание — нет.\n* `Street` — Дома в данных нет — отдан центр улицы. Осмысленный ответ («улица найдена, дом не заведён»), но для навигации до подъезда непригоден.\n* `Locality` — Улицы в данных нет — отдан центр населённого пункта. Как адрес это уже не читается: «где-то в этом городе».\n* `Area` — Отдан центр района или региона. Самый грубый из содержательных уровней.\n* `None` — Уровень неизвестен — координате верить нельзя. Такие объекты до клиента не доходят; значение существует, чтобы неизвестное не трактовалось молча как точное."
+      },
+      "GeocodeReverseResponse": {
+        "required": [
+          "query",
+          "address",
+          "billedUnits",
+          "attribution"
+        ],
+        "type": "object",
+        "properties": {
+          "query": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GeoPoint"
+              }
+            ],
+            "description": "Точка, для которой искали адрес."
+          },
+          "address": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GeocodeMatch"
+              }
+            ],
+            "description": "Ближайший адрес — ответ на заданный вопрос. Всегда заполнен: если адреса рядом нет, запрос\nзаканчивается статусом «не найдено» и не тарифицируется."
+          },
+          "neighbors": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/GeocodeMatch"
+            },
+            "description": "Следующие по близости дома. Заполнено, только если запрошена соответствующая опция и соседи\nдействительно нашлись."
+          },
+          "adminAreas": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/GeocodeAdminMembership"
+            },
+            "description": "Административные образования, внутри границ которых лежит точка, от общего к частному.\nЗаполнено, только если запрошена соответствующая опция."
+          },
+          "nearby": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/GeocodePoi"
+            },
+            "description": "Ориентиры вокруг точки. Заполнено, только если запрошена соответствующая опция и объекты\nнашлись."
+          },
+          "nearbyCompletenessNotice": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Оговорка о полноте данных по ориентирам. Заполнена вместе с nearby."
+          },
+          "billedUnits": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Сколько единиц работы списано за этот запрос: база плюс опции, которые действительно дали\nданные. Поле в ответе намеренно — клиент должен видеть, за что заплатил, не сверяясь с\nличным кабинетом.",
+            "format": "int32"
+          },
+          "attribution": {
+            "type": "string",
+            "description": "Строка указания источника данных. Отображать обязательно."
+          }
+        },
+        "description": "Ответ обратного геокодинга."
+      },
+      "GeoPoint": {
+        "type": "object",
+        "properties": {
+          "latitude": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "longitude": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyBearer": {
+        "type": "http",
+        "description": "The API key goes into the `Authorization: Bearer ak_…` header.\n\nKeys are created in your account: https://atlorium.com/Account/Manage/ApiKeys\n\nTo try it without registration and without being charged, use the demo key\n`ak_sandbox_demo_mockdata_v1` — it returns mock data and marks the response with\nthe `X-Atlorium-Sandbox: true` header.",
+        "scheme": "bearer",
+        "bearerFormat": "ak_…"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Reverse Geocoding API",
+      "description": "API documentation for reverse geocoding (address from coordinates: nearest object, distance to it, administrative hierarchy with a per-level reliability flag, plus a nearby mode returning landmark objects within a radius). Coverage is limited to Russia. Requests with no result are not charged.",
+      "externalDocs": {
+        "description": "Try it in the web interface",
+        "url": "https://atlorium.com/rgeoGUI"
+      }
+    }
+  ],
+  "externalDocs": {
+    "description": "Service overview, examples and limitations",
+    "url": "https://atlorium.com/rgeoDescription"
+  }
+}

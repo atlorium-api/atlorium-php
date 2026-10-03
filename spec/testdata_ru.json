@@ -1,0 +1,638 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "API генератора тестовых данных РФ",
+    "description": "Документация для API генератора тестовых данных (вымышленные, но формально корректные российские реквизиты для тестирования: ФИО, ИНН физлица и юрлица, СНИЛС, ОГРН и ОГРНИП, КПП, расчётный счёт с согласованным БИК, паспорт, телефон, адрес, номер карты). Все контрольные суммы сходятся, при передаче начального значения генератора результат воспроизводим. Данные вымышлены и не описывают реальных людей и организаций.\n\n### Авторизация\n\nВсе методы требуют API-ключ в заголовке запроса:\n\n```\nAuthorization: Bearer ak_ваш_ключ\n```\n\nКлючи создаются в личном кабинете, раздел [API-ключи](https://atlorium.com/Account/Manage/ApiKeys).\nГостевого доступа у API нет: запрос без ключа получает 401.\n\n### Песочница\n\nКлюч `ak_sandbox_demo_mockdata_v1` работает без регистрации и без списаний — возвращает\nправдоподобные демо-данные и помечает ответ заголовком `X-Atlorium-Sandbox: true`.\nУдобно проверить разбор ответа до подключения настоящего ключа.\n\n### Тарификация\n\nКредиты списываются **только за успешный ответ**. Отказы (400, 401, 402, 429, 5xx)\nне тарифицируются. Цены и бесплатные квоты — на странице [тарифов](https://atlorium.com/pricing),\nбаланс пополняется в [личном кабинете](https://atlorium.com/Account/Manage/Billing).\n\n### Ошибки\n\nЛюбой отказ возвращает **одну и ту же структуру** JSON — схема `ApiError` внизу страницы.\nРазбирать разные форматы под разные коды не нужно: машинный код причины всегда лежит\nв поле `error`.\n\n### Полезные ссылки\n\n* [Описание сервиса](https://atlorium.com/tdDescription) — что умеет, откуда данные, где границы применимости\n* [Веб-интерфейс](https://atlorium.com/tdGUI) — те же расчёты руками, без ключа\n* [Тарифы и лимиты](https://atlorium.com/pricing)\n* [Личный кабинет: API-ключи](https://atlorium.com/Account/Manage/ApiKeys)\n* [Личный кабинет: баланс и платежи](https://atlorium.com/Account/Manage/Billing)\n* [Блог](https://atlorium.com/blog) — разборы задач и примеры интеграции\n* [Сообщить о проблеме](https://atlorium.com/bug-report) · [support@atlorium.com](mailto:support@atlorium.com)\n* [Оферта](https://atlorium.com/terms-of-service) · [Политика обработки информации](https://atlorium.com/privacy-policy)",
+    "termsOfService": "https://atlorium.com/terms-of-service",
+    "contact": {
+      "name": "Atlorium",
+      "url": "https://atlorium.com/bug-report",
+      "email": "support@atlorium.com"
+    },
+    "license": {
+      "name": "Проприетарная — использование по оферте",
+      "url": "https://atlorium.com/terms-of-service"
+    },
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Текущий сервер (адрес берётся из строки браузера)"
+    }
+  ],
+  "paths": {
+    "/api/TestData": {
+      "get": {
+        "tags": [
+          "API генератора тестовых данных РФ"
+        ],
+        "summary": "Генерирует набор тестовых записей. Параметры передаются в строке запроса — самый\nбыстрый способ получить данные из curl, браузера или Swagger.",
+        "description": "Пример запроса:\nGET /api/testdata?count=5&fields=fullName,innPerson,snils&seed=42\n\nТАРИФИКАЦИЯ. Списывается по одной единице за каждую сгенерированную запись.\nОтклонённый запрос (400) не тарифицируется: резерв снимается без списания.",
+        "parameters": [
+          {
+            "name": "count",
+            "in": "query",
+            "description": "Сколько записей сгенерировать: от 1 до 100. По умолчанию 1.\nЭто же число — стоимость запроса в единицах работы (одна запись = одна единица).",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "description": "Список полей через запятую, например fullName,innPerson,snils. Если не указан,\nиспользуется набор по умолчанию: ФИО, пол, дата рождения, ИНН физлица, СНИЛС, телефон,\nпочта и адрес. Полный перечень доступных полей — GET /api/testdata/fields.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "seed",
+            "in": "query",
+            "description": "Начальное значение генератора. Одинаковый seed при одинаковых остальных параметрах\nдаёт в точности одинаковый результат — на этом строятся стабильные автотесты.\nЕсли не задан, значение выбирается сервисом и возвращается в ответе.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "gender",
+            "in": "query",
+            "description": "Пол генерируемых персон: any (по умолчанию, выбирается случайно по каждой\nзаписи), male или female.",
+            "schema": {
+              "default": "any",
+              "$ref": "#/components/schemas/TestDataGender"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "description": "Формат ответа: json (по умолчанию) или csv. CSV приходит плоской таблицей\nсо строкой заголовков; использованный seed в этом случае возвращается заголовком\nX-Atlorium-Seed.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Данные сгенерированы. JSON с записями либо таблица CSV — по значению format.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestDataResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestDataResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestDataResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Недопустимое количество записей, неизвестное поле или неизвестный формат.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API-ключ отсутствует, просрочен или недействителен.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Недостаточно кредитов на балансе для выполнения запроса.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Превышен rate-limit. Повторите запрос позже.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "через 42 секунды"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "API генератора тестовых данных РФ"
+        ],
+        "summary": "Генерирует набор тестовых записей по параметрам из тела запроса. Отличается от\nGET-варианта только способом передачи параметров — контракт и цена те же.",
+        "description": "Пример запроса:\nPOST /api/testdata\n{\n  \"count\": 5,\n  \"seed\": 42,\n  \"fields\": [\"fullName\", \"innPerson\", \"snils\"],\n  \"gender\": \"female\",\n  \"format\": \"json\"\n}\n\nТело удобнее строки запроса, когда полей много: список приходит массивом, а не\nстрокой через запятую, и не упирается в предел длины URL.\n\nТАРИФИКАЦИЯ. Списывается по одной единице за каждую сгенерированную запись.",
+        "requestBody": {
+          "description": "Параметры генерации: количество записей, список полей, seed, пол и формат ответа.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestDataRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestDataRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestDataRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Данные сгенерированы. JSON с записями либо таблица CSV — по значению format.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestDataResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestDataResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestDataResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Недопустимое количество записей, неизвестное поле или неизвестный формат.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API-ключ отсутствует, просрочен или недействителен.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Недостаточно кредитов на балансе для выполнения запроса.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Превышен rate-limit. Повторите запрос позже.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "через 42 секунды"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/TestData/fields": {
+      "get": {
+        "tags": [
+          "API генератора тестовых данных РФ"
+        ],
+        "summary": "Возвращает справочник всех типов данных, которые умеет генерировать сервис:\nидентификатор поля, название, пояснение, смысловую группу, пример значения и признак\nналичия контрольной суммы.",
+        "description": "Пример запроса:\nGET /api/testdata/fields\n\nИдентификаторы из этого справочника передаются в параметре fields запроса\nгенерации. Справочник — часть контракта: если поле есть здесь, его можно запросить.\n\nТАРИФИКАЦИЯ. Запрос БЕСПЛАТНЫЙ: справочник описывает контракт сервиса, а не является\nрезультатом его работы. Ограничение частоты запросов на него действует общее.",
+        "responses": {
+          "200": {
+            "description": "Справочник полей.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TestDataFieldDescriptor"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TestDataFieldDescriptor"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TestDataFieldDescriptor"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API-ключ отсутствует, просрочен или недействителен.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Недостаточно кредитов на балансе для выполнения запроса.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Превышен rate-limit. Повторите запрос позже.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "через 42 секунды"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "title": "Ошибка API",
+        "required": [
+          "error",
+          "title",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Машинный код причины отказа. Возможные значения:\n\n* `server_error` (500) — Сервис временно недоступен\n* `unauthorized` (401) — Требуется вход\n* `api_key_required` (401) — Нужен API-ключ\n* `account_not_activated` (402) — Аккаунт не активирован\n* `rate_limited_client` (429) — Слишком много запросов\n* `rate_limited_global` (429) — Высокая нагрузка на сервис\n* `provider_keys_exhausted` (429) — Сервис временно недоступен\n* `insufficient_credits` (402) — Недостаточно кредитов\n* `guest_quota_exhausted` (402) — Бесплатный лимит на сегодня исчерпан\n* `service_disabled` (503) — Проводятся плановые работы\n* `maintenance` (503) — Проводятся плановые работы\n* `guest_not_allowed` (402) — Нужна регистрация\n* `service_not_in_account_terms` (403) — Сервис не подключён\n* `bad_request` (400) — Некорректный запрос\n* `forbidden` (403) — Доступ запрещён\n* `not_found` (404) — Ничего не найдено\n* `method_not_allowed` (405) — Метод HTTP не поддерживается\n* `unsupported_media_type` (415) — Формат запроса не поддерживается\n* `not_implemented` (501) — Режим пока не реализован",
+            "example": "insufficient_credits"
+          },
+          "title": {
+            "type": "string",
+            "description": "Короткий заголовок для интерфейса.",
+            "example": "Недостаточно кредитов"
+          },
+          "message": {
+            "type": "string",
+            "description": "Подробное объяснение: что произошло и что с этим делать. Показывается пользователю целиком."
+          },
+          "balance": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Текущий баланс в кредитах. Заполняется при 402, чтобы не делать отдельный запрос за балансом; в остальных случаях null."
+          },
+          "retryAfterSeconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Через сколько секунд имеет смысл повторить запрос. Дублирует HTTP-заголовок Retry-After. null — если повтор не поможет (например, кончились кредиты)."
+          },
+          "retryAfterText": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Та же задержка готовой фразой — «через 2 мин 30 с». Чтобы клиентам не приходилось самим склонять минуты и секунды."
+          }
+        },
+        "description": "Единое тело ответа для любого отказа: и для ошибки валидации, и для отсутствующего ключа, и для исчерпанного лимита. Ветвиться в коде следует по полю `error` — это стабильный машинный код. Поля `title` и `message` предназначены человеку, их формулировки могут меняться."
+      },
+      "TestDataFieldDescriptor": {
+        "required": [
+          "id",
+          "title",
+          "titleEn",
+          "description",
+          "descriptionEn",
+          "group",
+          "hasChecksum",
+          "sample"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Технический идентификатор поля — то, что клиент передаёт в запросе и что становится\nключом в JSON-записи и заголовком колонки CSV. Например innPerson."
+          },
+          "title": {
+            "type": "string",
+            "description": "Название поля по-русски."
+          },
+          "titleEn": {
+            "type": "string",
+            "description": "Название поля по-английски."
+          },
+          "description": {
+            "type": "string",
+            "description": "Пояснение: что именно в поле и как оно устроено."
+          },
+          "descriptionEn": {
+            "type": "string",
+            "description": "То же по-английски."
+          },
+          "group": {
+            "type": "string",
+            "description": "Смысловая группа поля, по которой поля удобно группировать при выборе:\n«Персона», «Налоговые реквизиты», «Банк», «Документы», «Контакты», «Адрес», «Организация», «Транспорт»."
+          },
+          "hasChecksum": {
+            "type": "boolean",
+            "description": "true, если у значения есть рассчитываемый контрольный разряд (ИНН, СНИЛС, ОГРН,\n            счёт, номер карты, VIN) — такое значение пройдёт проверку контрольной суммы в вашей системе."
+          },
+          "sample": {
+            "type": "string",
+            "description": "Пример значения этого поля."
+          }
+        },
+        "description": "Описание одного типа данных (поля), который умеет генерировать сервис: идентификатор\nдля запроса, название, пояснение, смысловая группа и пример значения."
+      },
+      "TestDataGender": {
+        "enum": [
+          "any",
+          "male",
+          "female"
+        ],
+        "description": "Пол сгенерированной персоны. Определяет согласование имени, отчества и фамилии между собой.\n\nЗначения:\n* `Any` — Пол выбирается случайно для каждой записи.\n* `Male` — Все записи — мужские: имя, отчество и фамилия согласованы в мужском роде.\n* `Female` — Все записи — женские: имя, отчество и фамилия согласованы в женском роде."
+      },
+      "TestDataRequest": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Сколько записей сгенерировать. Допустимо от 1 до maxCount.\nЗначение по умолчанию — 1.",
+            "format": "int32"
+          },
+          "seed": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Начальное значение генератора случайных чисел. Одинаковый seed при одинаковом наборе\nполей и количестве записей даёт побайтово одинаковый результат — на этом строятся\nстабильные автотесты.",
+            "format": "int32"
+          },
+          "fields": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Список полей, которые нужно сгенерировать (идентификаторы из каталога\nTestDataFields). Пустой список или null — будет использован\nнабор по умолчанию default."
+          },
+          "gender": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TestDataGender"
+              }
+            ],
+            "description": "Пол генерируемых персон: any (по умолчанию), male или female.\nВлияет только на поля персоны — имя, отчество, фамилию, обращение и производные\nот них логин и почту."
+          },
+          "format": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Формат ответа: json (по умолчанию) или csv.\nЗначения из TestDataFormats."
+          }
+        },
+        "description": "Запрос на генерацию тестовых данных."
+      },
+      "TestDataResponse": {
+        "type": "object",
+        "properties": {
+          "seed": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Начальное значение генератора, фактически использованное при построении выдачи.\nСовпадает с переданным в запросе либо выбрано сервисом, если клиент его не задал.\nПередайте это же значение, чтобы получить точно такой же результат снова.",
+            "format": "int32"
+          },
+          "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество записей в records.",
+            "format": "int32"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Идентификаторы полей в порядке следования — он же порядок колонок в CSV."
+          },
+          "records": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "description": "Сгенерированные записи. Каждая запись — словарь «идентификатор поля → значение».\nВсе значения строковые: тестовые данные почти всегда идут дальше как текст (в CSV,\nв форму, в SQL-скрипт), и единый строковый тип избавляет клиента от разбора\nразнотипного JSON."
+          },
+          "disclaimer": {
+            "type": "string",
+            "description": "Напоминание о характере данных, которое едет вместе с каждым ответом. Оставлено в\nконтракте намеренно: если выгрузка окажется в чужих руках или попадёт в лог, из неё\nсамой должно быть видно, что это вымышленные данные для тестирования."
+          }
+        },
+        "description": "Ответ сервиса в формате JSON."
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyBearer": {
+        "type": "http",
+        "description": "API-ключ передаётся в заголовке `Authorization: Bearer ak_…`.\n\nКлючи создаются в личном кабинете: https://atlorium.com/Account/Manage/ApiKeys\n\nЧтобы попробовать без регистрации и без списаний, вставьте демо-ключ\n`ak_sandbox_demo_mockdata_v1` — он возвращает моковые данные и помечает ответ\nзаголовком `X-Atlorium-Sandbox: true`.",
+        "scheme": "bearer",
+        "bearerFormat": "ak_…"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "API генератора тестовых данных РФ",
+      "description": "Документация для API генератора тестовых данных (вымышленные, но формально корректные российские реквизиты для тестирования: ФИО, ИНН физлица и юрлица, СНИЛС, ОГРН и ОГРНИП, КПП, расчётный счёт с согласованным БИК, паспорт, телефон, адрес, номер карты). Все контрольные суммы сходятся, при передаче начального значения генератора результат воспроизводим. Данные вымышлены и не описывают реальных людей и организаций.",
+      "externalDocs": {
+        "description": "Попробовать в веб-интерфейсе",
+        "url": "https://atlorium.com/tdGUI"
+      }
+    }
+  ],
+  "externalDocs": {
+    "description": "Описание сервиса, примеры и границы применимости",
+    "url": "https://atlorium.com/tdDescription"
+  }
+}

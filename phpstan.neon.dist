@@ -1,0 +1,16 @@
+# Статический анализ на минимальной поддерживаемой версии языка.
+parameters:
+    level: max
+    phpVersion: 70400
+    paths:
+        - src
+        - autoload.php
+    # Точечные @phpstan-ignore-next-line стоят у проверок PHP_VERSION_ID: при phpVersion 70400 они
+    # для анализатора всегда истинны/ложны. Если какая-то версия PHPStan их не заметит — это не ошибка.
+    reportUnmatchedIgnoredErrors: false
+    ignoreErrors:
+        # Атрибут #[\SensitiveParameter] (PHP 8.2+) прячет API-ключ из трассировок стека; в PHP 7.4 это
+        # комментарий, а класса атрибута в заглушках PHP 7.4 нет.
+        -
+            message: '#SensitiveParameter#'
+            path: src/BaseClient.php

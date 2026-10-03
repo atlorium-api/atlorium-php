@@ -1,0 +1,833 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "API справочника БИК",
+    "description": "Документация для API справочника БИК ЦБ РФ (поиск банка по БИК/названию/SWIFT, статистика).\n\n### Авторизация\n\nВсе методы требуют API-ключ в заголовке запроса:\n\n```\nAuthorization: Bearer ak_ваш_ключ\n```\n\nКлючи создаются в личном кабинете, раздел [API-ключи](https://atlorium.com/Account/Manage/ApiKeys).\nГостевого доступа у API нет: запрос без ключа получает 401.\n\n### Песочница\n\nКлюч `ak_sandbox_demo_mockdata_v1` работает без регистрации и без списаний — возвращает\nправдоподобные демо-данные и помечает ответ заголовком `X-Atlorium-Sandbox: true`.\nУдобно проверить разбор ответа до подключения настоящего ключа.\n\n### Тарификация\n\nКредиты списываются **только за успешный ответ**. Отказы (400, 401, 402, 429, 5xx)\nне тарифицируются. Цены и бесплатные квоты — на странице [тарифов](https://atlorium.com/pricing),\nбаланс пополняется в [личном кабинете](https://atlorium.com/Account/Manage/Billing).\n\n### Ошибки\n\nЛюбой отказ возвращает **одну и ту же структуру** JSON — схема `ApiError` внизу страницы.\nРазбирать разные форматы под разные коды не нужно: машинный код причины всегда лежит\nв поле `error`.\n\n### Полезные ссылки\n\n* [Описание сервиса](https://atlorium.com/cbrDescription) — что умеет, откуда данные, где границы применимости\n* [Веб-интерфейс](https://atlorium.com/cbrGUI) — те же расчёты руками, без ключа\n* [Тарифы и лимиты](https://atlorium.com/pricing)\n* [Личный кабинет: API-ключи](https://atlorium.com/Account/Manage/ApiKeys)\n* [Личный кабинет: баланс и платежи](https://atlorium.com/Account/Manage/Billing)\n* [Блог](https://atlorium.com/blog) — разборы задач и примеры интеграции\n* [Сообщить о проблеме](https://atlorium.com/bug-report) · [support@atlorium.com](mailto:support@atlorium.com)\n* [Оферта](https://atlorium.com/terms-of-service) · [Политика обработки информации](https://atlorium.com/privacy-policy)",
+    "termsOfService": "https://atlorium.com/terms-of-service",
+    "contact": {
+      "name": "Atlorium",
+      "url": "https://atlorium.com/bug-report",
+      "email": "support@atlorium.com"
+    },
+    "license": {
+      "name": "Проприетарная — использование по оферте",
+      "url": "https://atlorium.com/terms-of-service"
+    },
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Текущий сервер (адрес берётся из строки браузера)"
+    }
+  ],
+  "paths": {
+    "/api/Cbr/{bik}": {
+      "get": {
+        "tags": [
+          "API справочника БИК"
+        ],
+        "summary": "Возвращает реквизиты участника справочника по точному БИК (9 цифр).",
+        "description": "Пример запроса:\nGET /api/cbr/044525225",
+        "parameters": [
+          {
+            "name": "bik",
+            "in": "path",
+            "description": "БИК — банковский идентификационный код (ровно 9 цифр). Пример: 044525225 (ПАО Сбербанк).",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ. Возвращает реквизиты участника.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CbrBankInfo"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CbrBankInfo"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CbrBankInfo"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "БИК не указан или имеет неверный формат (не 9 цифр).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Участник с указанным БИК не найден в справочнике.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "not_found",
+                  "title": "Ничего не найдено",
+                  "message": "По запросу «GET /api/…» данных нет. Если сомневаетесь в адресе метода — сверьтесь со спецификацией: /openapi/{идентификатор_сервиса}_ru.json.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API-ключ отсутствует, просрочен или недействителен.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Недостаточно кредитов на балансе для выполнения запроса.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Превышен rate-limit. Повторите запрос позже.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "через 42 секунды"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Справочник БИК временно недоступен. Повторите запрос позже.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "maintenance",
+                  "title": "Проводятся плановые работы",
+                  "message": "Выполнение запросов временно приостановлено на время плановых работ. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/Cbr/search": {
+      "get": {
+        "tags": [
+          "API справочника БИК"
+        ],
+        "summary": "Ищет участников по наименованию, городу, SWIFT или началу БИК.",
+        "description": "Примеры запросов:\nGET /api/cbr/search?query=Сбербанк\nGET /api/cbr/search?query=0445&limit=50",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "description": "Строка поиска. Если состоит только из цифр — трактуется как БИК (поиск по началу кода),\nиначе ищется как подстрока в наименовании, населённом пункте и SWIFT.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Максимальное количество результатов (по умолчанию 20, максимум 100).",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ. Возвращает найденных участников.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CbrSearchResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CbrSearchResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CbrSearchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Параметр query не указан или пустой.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API-ключ отсутствует, просрочен или недействителен.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Недостаточно кредитов на балансе для выполнения запроса.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Превышен rate-limit. Повторите запрос позже.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "через 42 секунды"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Справочник БИК временно недоступен. Повторите запрос позже.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "maintenance",
+                  "title": "Проводятся плановые работы",
+                  "message": "Выполнение запросов временно приостановлено на время плановых работ. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/Cbr/stats": {
+      "get": {
+        "tags": [
+          "API справочника БИК"
+        ],
+        "summary": "Возвращает статистику загруженного справочника: размер, дата актуальности, готовность.",
+        "description": "Пример запроса:\nGET /api/cbr/stats",
+        "responses": {
+          "200": {
+            "description": "Статистика справочника БИК.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CbrStatsResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CbrStatsResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CbrStatsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API-ключ отсутствует, просрочен или недействителен.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Недостаточно кредитов на балансе для выполнения запроса.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Превышен rate-limit. Повторите запрос позже.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "через 42 секунды"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "title": "Ошибка API",
+        "required": [
+          "error",
+          "title",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Машинный код причины отказа. Возможные значения:\n\n* `server_error` (500) — Сервис временно недоступен\n* `unauthorized` (401) — Требуется вход\n* `api_key_required` (401) — Нужен API-ключ\n* `account_not_activated` (402) — Аккаунт не активирован\n* `rate_limited_client` (429) — Слишком много запросов\n* `rate_limited_global` (429) — Высокая нагрузка на сервис\n* `provider_keys_exhausted` (429) — Сервис временно недоступен\n* `insufficient_credits` (402) — Недостаточно кредитов\n* `guest_quota_exhausted` (402) — Бесплатный лимит на сегодня исчерпан\n* `service_disabled` (503) — Проводятся плановые работы\n* `maintenance` (503) — Проводятся плановые работы\n* `guest_not_allowed` (402) — Нужна регистрация\n* `service_not_in_account_terms` (403) — Сервис не подключён\n* `bad_request` (400) — Некорректный запрос\n* `forbidden` (403) — Доступ запрещён\n* `not_found` (404) — Ничего не найдено\n* `method_not_allowed` (405) — Метод HTTP не поддерживается\n* `unsupported_media_type` (415) — Формат запроса не поддерживается\n* `not_implemented` (501) — Режим пока не реализован",
+            "example": "insufficient_credits"
+          },
+          "title": {
+            "type": "string",
+            "description": "Короткий заголовок для интерфейса.",
+            "example": "Недостаточно кредитов"
+          },
+          "message": {
+            "type": "string",
+            "description": "Подробное объяснение: что произошло и что с этим делать. Показывается пользователю целиком."
+          },
+          "balance": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Текущий баланс в кредитах. Заполняется при 402, чтобы не делать отдельный запрос за балансом; в остальных случаях null."
+          },
+          "retryAfterSeconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Через сколько секунд имеет смысл повторить запрос. Дублирует HTTP-заголовок Retry-After. null — если повтор не поможет (например, кончились кредиты)."
+          },
+          "retryAfterText": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Та же задержка готовой фразой — «через 2 мин 30 с». Чтобы клиентам не приходилось самим склонять минуты и секунды."
+          }
+        },
+        "description": "Единое тело ответа для любого отказа: и для ошибки валидации, и для отсутствующего ключа, и для исчерпанного лимита. Ветвиться в коде следует по полю `error` — это стабильный машинный код. Поля `title` и `message` предназначены человеку, их формулировки могут меняться."
+      },
+      "CbrAccount": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string",
+            "description": "Номер счёта (Accounts@Account, 20 цифр)."
+          },
+          "accountType": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Тип счёта по классификации ЦБ (Accounts@RegulationAccountType): \"CRSA\" — корреспондентский\nсчёт, \"CRSS\" — субсчёт и т.п. Позволяет отличить основной корсчёт от прочих счетов."
+          },
+          "controlKey": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Контрольный ключ счёта (Accounts@CK). Используется при проверке реквизитов платежа."
+          },
+          "cbrBic": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "БИК подразделения Банка России, в котором открыт счёт (Accounts@AccountCBRBIC)."
+          },
+          "status": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Статус счёта (Accounts@AccountStatus): \"ACAC\" — действующий. Прочие значения означают\nзакрытый/недействующий счёт. Возвращается в исходном виде справочника."
+          },
+          "dateIn": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Дата открытия счёта (Accounts@DateIn). null, если не указана.",
+            "format": "date"
+          },
+          "restrictions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CbrAccountRestriction"
+            },
+            "description": "Ограничения на уровне счёта (элементы <AccRstrList> внутри <Accounts>). Например,\nпри переводе счёта на обслуживание в другое подразделение указывается счёт-правопреемник.\nПустой список — ограничений по счёту нет."
+          }
+        },
+        "description": "Счёт участника справочника БИК (элемент <Accounts> внутри BICDirectoryEntry).\nСодержит реквизиты, нужные для формирования платёжных поручений."
+      },
+      "CbrAccountRestriction": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Код ограничения по счёту (AccRstrList@AccRstr) в исходном виде справочника."
+          },
+          "date": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Дата введения ограничения по счёту (AccRstrList@AccRstrDate). null, если не указана.",
+            "format": "date"
+          },
+          "successorBic": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "БИК подразделения/счёта-правопреемника (AccRstrList@SuccessorBIC), если счёт переведён.\nnull, если правопреемника нет."
+          }
+        },
+        "description": "Ограничение на уровне счёта (элемент <AccRstrList> внутри <Accounts>)."
+      },
+      "CbrBankInfo": {
+        "type": "object",
+        "properties": {
+          "bik": {
+            "type": "string",
+            "description": "БИК — банковский идентификационный код (9 цифр). Атрибут BIC у BICDirectoryEntry."
+          },
+          "name": {
+            "type": "string",
+            "description": "Наименование участника (ParticipantInfo@NameP)."
+          },
+          "englishName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Наименование участника на английском (ParticipantInfo@EnglName). Есть не у всех."
+          },
+          "corrAccount": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Корреспондентский счёт участника (счёт из <Accounts> с типом RegulationAccountType=\"CRSA\").\nЭто основной корреспондентский счёт участника; полный список счетов — в accounts.\nДля участников без корсчёта (УФК, некоторые подразделения) — null."
+          },
+          "countryCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Код страны участника по ISO-3166 alpha-2 (ParticipantInfo@CntrCd, обычно \"RU\")."
+          },
+          "parentBic": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "БИК головной организации (ParticipantInfo@PrntBIC). Заполнен у филиалов и подразделений —\nуказывает на головной банк. У головных банков обычно отсутствует. Удобно для связки «филиал → банк»."
+          },
+          "regionCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Код региона РФ (ParticipantInfo@Rgn, 2 цифры)."
+          },
+          "postalIndex": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Почтовый индекс (ParticipantInfo@Ind)."
+          },
+          "localityType": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Тип населённого пункта (ParticipantInfo@Tnp, например \"г\", \"пгт\")."
+          },
+          "locality": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Наименование населённого пункта (ParticipantInfo@Nnp)."
+          },
+          "address": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Адрес участника (ParticipantInfo@Adr)."
+          },
+          "registrationNumber": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Регистрационный номер кредитной организации по КГРКО (ParticipantInfo@RegN). Есть не у всех."
+          },
+          "uid": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Уникальный идентификатор участника в справочнике (ParticipantInfo@UID). Сквозной ключ ЦБ."
+          },
+          "dateIn": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Дата включения участника в справочник (ParticipantInfo@DateIn). null, если не указана.",
+            "format": "date"
+          },
+          "swift": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "«Основной» SWIFT/BIC-код участника (помеченный DefaultSWBIC=\"1\", иначе первый из списка) —\nПолный список кодов — в swiftCodes. null, если код не задан."
+          },
+          "swiftCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Все SWIFT/BIC-коды участника (атрибуты SWBIC всех элементов <SWBICS>). У части участников\nих несколько (например, разные коды для подразделений). Пустой список, если SWIFT не задан."
+          },
+          "accounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CbrAccount"
+            },
+            "description": "Все счета участника из блока <Accounts> с их реквизитами (номер, контрольный ключ,\nподразделение Банка России, статус, дата открытия). Обычно один корсчёт (CRSA), но бывает больше."
+          },
+          "restrictions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CbrRestriction"
+            },
+            "description": "Ограничения, наложенные на участника (блок <RstrList>). Например, код \"URRS\" — отзыв\nлицензии. Пустой список — действующих ограничений нет. Важно для оценки благонадёжности банка."
+          },
+          "participantType": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Тип участника (ParticipantInfo@PtType). Двузначный код ЦБ: например \"00\" — головной банк,\n\"10\"/\"20\" — филиалы, \"40\" — РКЦ, \"52\" — УФК. Возвращается в исходном виде справочника."
+          },
+          "serviceCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Код участия в системах/услугах Банка России (ParticipantInfo@Srvcs). Технический код ЦБ,\nотражающий доступные участнику сервисы. Возвращается в исходном виде. null, если не указан."
+          },
+          "exchangeType": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Тип обмена электронными сообщениями с Банком России (ParticipantInfo@XchType). Технический\nкод ЦБ. Возвращается в исходном виде. null, если не указан."
+          },
+          "status": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Статус участника (ParticipantInfo@ParticipantStatus): \"PSAC\" — действующий.\nВозвращается в исходном виде справочника — по нему действующие участники отличаются\nот исключённых."
+          }
+        },
+        "description": "Карточка одного участника справочника БИК: банка, филиала, РКЦ, УФК и т.п.\nСодержит реквизиты записи справочника Банка России одним плоским набором полей —\nнаименование и адрес участника, счета, коды SWIFT и действующие ограничения."
+      },
+      "CbrRestriction": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Код ограничения (RstrList@Rstr). Примеры: \"URRS\" — отзыв лицензии, \"LWRS\" — ликвидация,\n\"MRTS\" — мораторий. Код возвращается в исходном виде и сопоставляется со справочником\nкодов ограничений Банка России."
+          },
+          "date": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Дата введения ограничения (RstrList@RstrDate). null, если не указана.",
+            "format": "date"
+          }
+        },
+        "description": "Ограничение, наложенное на участника справочника БИК (элемент <RstrList>)."
+      },
+      "CbrSearchResponse": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Исходная строка запроса (как её ввёл пользователь)."
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CbrBankInfo"
+            },
+            "description": "Найденные участники справочника."
+          },
+          "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество элементов в results.",
+            "format": "int32"
+          },
+          "elapsedMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Время выполнения поиска в миллисекундах.",
+            "format": "int64"
+          }
+        },
+        "description": "Ответ на поиск по справочнику БИК: найденные карточки участников и параметры запроса."
+      },
+      "CbrStatsResponse": {
+        "type": "object",
+        "properties": {
+          "isReady": {
+            "type": "boolean",
+            "description": "Готов ли справочник отвечать на запросы."
+          },
+          "totalEntries": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Всего записей в справочнике.",
+            "format": "int32"
+          },
+          "withCorrAccount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество участников, имеющих корреспондентский счёт (CRSA).",
+            "format": "int32"
+          },
+          "withSwift": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество участников с заполненным SWIFT.",
+            "format": "int32"
+          },
+          "directoryDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Дата, на которую актуален справочник (атрибут BusinessDay корня <ED807>).\nnull, если справочник ещё не загружен.",
+            "format": "date"
+          },
+          "loadedAtUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Момент (UTC) последнего обновления данных справочника.",
+            "format": "date-time"
+          }
+        },
+        "description": "Сведения о справочнике БИК: объём и дата актуальности данных."
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyBearer": {
+        "type": "http",
+        "description": "API-ключ передаётся в заголовке `Authorization: Bearer ak_…`.\n\nКлючи создаются в личном кабинете: https://atlorium.com/Account/Manage/ApiKeys\n\nЧтобы попробовать без регистрации и без списаний, вставьте демо-ключ\n`ak_sandbox_demo_mockdata_v1` — он возвращает моковые данные и помечает ответ\nзаголовком `X-Atlorium-Sandbox: true`.",
+        "scheme": "bearer",
+        "bearerFormat": "ak_…"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "API справочника БИК",
+      "description": "Документация для API справочника БИК ЦБ РФ (поиск банка по БИК/названию/SWIFT, статистика).",
+      "externalDocs": {
+        "description": "Попробовать в веб-интерфейсе",
+        "url": "https://atlorium.com/cbrGUI"
+      }
+    }
+  ],
+  "externalDocs": {
+    "description": "Описание сервиса, примеры и границы применимости",
+    "url": "https://atlorium.com/cbrDescription"
+  }
+}

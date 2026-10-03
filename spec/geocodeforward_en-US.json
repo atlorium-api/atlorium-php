@@ -1,0 +1,1415 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "Forward Geocoding API",
+    "description": "API documentation for forward geocoding (coordinates from an address: free-form and structured search, place lookup by identifier, confidence score and match type). Coverage is limited to Russia. Requests with no result, and results below the confidence threshold, are not charged.\n\n### Authorization\n\nEvery method requires an API key in the request header:\n\n```\nAuthorization: Bearer ak_your_key\n```\n\nKeys are created in your account, section [API keys](https://atlorium.com/Account/Manage/ApiKeys).\nThe API has no guest access: a request without a key returns 401.\n\n### Sandbox\n\nThe key `ak_sandbox_demo_mockdata_v1` works without registration and is never charged — it\nreturns realistic demo data and marks the response with the `X-Atlorium-Sandbox: true` header.\nUse it to validate your response parsing before plugging in a real key.\n\n### Billing\n\nCredits are charged **only for a successful response**. Rejections (400, 401, 402, 429, 5xx)\nare never charged. Prices and free quotas are on the [pricing page](https://atlorium.com/pricing);\nthe balance is topped up in your [account](https://atlorium.com/Account/Manage/Billing).\n\n### Errors\n\nEvery rejection returns **the same JSON structure** — see the `ApiError` schema at the bottom\nof this page. There is no need to parse a different shape per status code: the machine-readable\nreason always lives in the `error` field.\n\n### Useful links\n\n* [Service overview](https://atlorium.com/geoDescription) — what it does, where the data comes from, what it does not cover\n* [Web interface](https://atlorium.com/geoGUI) — the same lookups by hand, no key required\n* [Pricing and limits](https://atlorium.com/pricing)\n* [Account: API keys](https://atlorium.com/Account/Manage/ApiKeys)\n* [Account: balance and payments](https://atlorium.com/Account/Manage/Billing)\n* [Blog](https://atlorium.com/blog)\n* [Report a problem](https://atlorium.com/bug-report) · [support@atlorium.com](mailto:support@atlorium.com)\n* [Terms of Service](https://atlorium.com/terms-of-service) · [Privacy policy](https://atlorium.com/privacy-policy)",
+    "termsOfService": "https://atlorium.com/terms-of-service",
+    "contact": {
+      "name": "Atlorium",
+      "url": "https://atlorium.com/bug-report",
+      "email": "support@atlorium.com"
+    },
+    "license": {
+      "name": "Proprietary — see Terms of Service",
+      "url": "https://atlorium.com/terms-of-service"
+    },
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Current server"
+    }
+  ],
+  "paths": {
+    "/api/geocodeforward": {
+      "get": {
+        "tags": [
+          "Forward Geocoding API"
+        ],
+        "summary": "Finds coordinates for an address written as a single free-form string.",
+        "description": "Example request:\nGET /api/geocodeforward?text=Казань, улица Баумана, 13&size=5\n\nHOUSE NUMBER PARSING. The number is separated from the name right to left, by the last\nstandalone number. Street names that begin with a number are therefore parsed correctly.\n\nA PARTIAL MATCH IS NOT AN ERROR. If you send \"13к2\" while the registry holds a single\nrecord \"13\", house 13 is returned with precision = range. This is deliberate: \"found\nwith a caveat\" is more useful than \"not found\". Set exactOnly if you need literal\nmatches only.\n\nWHEN TO USE exactOnly. Where an approximate coordinate is worse than none: delivery to\nthe entrance, binding an object to a specific building. The mode may turn a successful\nsearch into \"not found\" — free of charge, like any empty result.\n\nBILLING. The request is not charged when the address is not found, when what was found\nis coarser than street level, when the input string is invalid, or when the geocoder is\nunavailable.",
+        "parameters": [
+          {
+            "name": "text",
+            "in": "query",
+            "description": "Free-form address string. Example: Казань, улица Баумана, 13",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "description": "How many candidates to return. Values outside the allowed range are clamped to the\nboundary rather than rejected.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 5
+            }
+          },
+          {
+            "name": "exactOnly",
+            "in": "query",
+            "description": "Keep only exact house matches (precision = exact) and discard everything else.\nDisabled by default.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success. Returns the list of matches with coordinates.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodeForwardResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodeForwardResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodeForwardResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The address string is missing, too short or too long.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The API key is missing, expired or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Not enough credits on the balance to run the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The address was not found, or what was found is coarser than street level. Not charged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "not_found",
+                  "title": "Ничего не найдено",
+                  "message": "По запросу «GET /api/…» данных нет. Если сомневаетесь в адресе метода — сверьтесь со спецификацией: /openapi/{идентификатор_сервиса}_ru.json.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded. Retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "in 42 seconds"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The geocoding service is temporarily unavailable. Not charged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "maintenance",
+                  "title": "Проводятся плановые работы",
+                  "message": "Выполнение запросов временно приостановлено на время плановых работ. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/geocodeforward/structured": {
+      "get": {
+        "tags": [
+          "Forward Geocoding API"
+        ],
+        "summary": "Finds coordinates for an address split into separate fields.",
+        "description": "Example request:\nGET /api/geocodeforward/structured?locality=Казань&address=улица Баумана, 13\n\nWHEN THIS MODE IS MORE ACCURATE. A structured request removes the ambiguity of which\npart of the string is the city and which is the street. If your address is already\nstored field by field, send it that way.\n\nYou do not have to fill in every field — only the ones you know. A request with no\naddress field filled in at all is rejected with code 400 and is not charged.\n\nTHE POSTAL CODE IS A CHECK, NOT A FILTER. If it is set and does not match what was\nfound, the results are still returned: postal codes in client databases go stale more\noften than addresses. If ONLY the postal code is filled in, the request is equivalent to\nthe \"postal code contents\" mode.\n\nBILLING. Same as in the free-form mode: you pay only for a result that was found.",
+        "parameters": [
+          {
+            "name": "address",
+            "in": "query",
+            "description": "Street with house number. Example: улица Баумана, 13",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "locality",
+            "in": "query",
+            "description": "Locality. Example: Казань",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "region",
+            "in": "query",
+            "description": "Region of the Russian Federation. Example: Республика Татарстан",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "postalCode",
+            "in": "query",
+            "description": "Postal code. Example: 420111",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "description": "How many candidates to return.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 5
+            }
+          },
+          {
+            "name": "exactOnly",
+            "in": "query",
+            "description": "Keep only exact house matches. Disabled by default.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success. Returns the list of matches with coordinates.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodeForwardResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodeForwardResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodeForwardResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No address field was filled in.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The API key is missing, expired or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Not enough credits on the balance to run the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The address was not found, or what was found is coarser than street level. Not charged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "not_found",
+                  "title": "Ничего не найдено",
+                  "message": "По запросу «GET /api/…» данных нет. Если сомневаетесь в адресе метода — сверьтесь со спецификацией: /openapi/{идентификатор_сервиса}_ru.json.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded. Retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "in 42 seconds"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The geocoding service is temporarily unavailable. Not charged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "maintenance",
+                  "title": "Проводятся плановые работы",
+                  "message": "Выполнение запросов временно приостановлено на время плановых работ. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/geocodeforward/batch": {
+      "post": {
+        "tags": [
+          "Forward Geocoding API"
+        ],
+        "summary": "Geocodes a batch of addresses in a single request. The response follows the request order.",
+        "description": "Example request:\nPOST /api/geocodeforward/batch\n{\n  \"queries\": [\"Казань, улица Баумана, 13\", \"Москва, Тверская 1\"],\n  \"sizePerQuery\": 1\n}\n\nWHY THIS MODE EXISTS. The typical job is to run a dump from your own system — tens of\nthousands of rows. One by one that is the same number of network round trips, and almost\nall the time is spent on connection overhead rather than on the search itself.\n\nORDER IS GUARANTEED. The response holds exactly as many items as strings were sent, in\nthe same order. In addition every item carries its original string in the query field.\n\nA MISSING ROW DOES NOT ABORT THE BATCH. It gets its own item with an empty matches list.\n\nBILLING. You pay for as many rows as were actually found: a missing row inside a batch\nis free exactly as it is on its own. The requested, found and billedUnits fields let you\nreconcile the invoice. A batch where nothing was found is not charged at all.\n\nLIMIT. No more than 1000 addresses per call. A larger batch is rejected as a whole (400)\n— extra rows are never dropped silently.",
+        "requestBody": {
+          "description": "The batch: a list of address strings, the number of candidates per string and the exact\nmatch mode.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeocodeBatchRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeocodeBatchRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeocodeBatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success. Returns the result for every row of the batch.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodeBatchResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodeBatchResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodeBatchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The batch is empty, missing or exceeds the size limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The API key is missing, expired or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Not enough credits on the balance to run the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not a single address of the batch was found. Not charged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "not_found",
+                  "title": "Ничего не найдено",
+                  "message": "По запросу «GET /api/…» данных нет. Если сомневаетесь в адресе метода — сверьтесь со спецификацией: /openapi/{идентификатор_сервиса}_ru.json.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded. Retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "in 42 seconds"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The geocoding service is temporarily unavailable. Not charged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "maintenance",
+                  "title": "Проводятся плановые работы",
+                  "message": "Выполнение запросов временно приостановлено на время плановых работ. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/geocodeforward/place": {
+      "get": {
+        "tags": [
+          "Forward Geocoding API"
+        ],
+        "summary": "Returns an object card by the identifier received in an earlier geocoding response and,\noptionally, its administrative boundary.",
+        "description": "Example request:\nGET /api/geocodeforward/place?placeId=8fd4d1a6-a4a5-4c0d-9c5c-2d0f4b4c1d31\n\nWith the boundary:\nGET /api/geocodeforward/place?placeId=8fd4d1a6-a4a5-4c0d-9c5c-2d0f4b4c1d31&includeBoundary=true\n\nWHY THIS MODE EXISTS. The object identifier is stable FOREVER: it is assigned by the\nstate registry and does not change when our data is refreshed. Once stored, it returns\nexactly THE SAME object, whereas repeating a text search may return a different candidate.\n\nNOT EVERYTHING HAS A BOUNDARY. Administrative units — regions, districts, cities — do;\nhouses and streets do not. Asking for one is not an error: the boundary field stays\nempty and the second unit of work is not charged. To get the city boundary for a house,\nuse the identifier from its parentPlaceId field.\n\nTHE GEOMETRY IS SIMPLIFIED. Original boundaries can be tens of megabytes per region.\nPoints right at the border may fall on the wrong side; for an exact membership answer\nuse reverse geocoding. This caveat travels inside the response itself.\n\nBILLING. A non-existent identifier (404) is not charged.",
+        "parameters": [
+          {
+            "name": "placeId",
+            "in": "query",
+            "description": "Object identifier — the value of the placeId field from any earlier response of the\ngeocoding services.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "includeBoundary",
+            "in": "query",
+            "description": "Also return the object boundary as GeoJSON. Costs an extra unit of work, and only if the\nboundary was actually returned.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success. Returns the object card.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodePlaceResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodePlaceResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodePlaceResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The identifier is missing or malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The API key is missing, expired or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Not enough credits on the balance to run the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No object with such identifier was found. Not charged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "not_found",
+                  "title": "Ничего не найдено",
+                  "message": "По запросу «GET /api/…» данных нет. Если сомневаетесь в адресе метода — сверьтесь со спецификацией: /openapi/{идентификатор_сервиса}_ru.json.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded. Retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "in 42 seconds"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The geocoding service is temporarily unavailable. Not charged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "maintenance",
+                  "title": "Проводятся плановые работы",
+                  "message": "Выполнение запросов временно приостановлено на время плановых работ. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/geocodeforward/postcode": {
+      "get": {
+        "tags": [
+          "Forward Geocoding API"
+        ],
+        "summary": "Returns the locality and the address-forming objects the postal code belongs to.",
+        "description": "Example request:\nGET /api/geocodeforward/postcode?code=420111\n\nWHY THIS IS USEFUL. The inverse of geocoding, and surprisingly common: given a postal\ncode from an invoice, a form or a data dump, find out which locality and which streets\nit belongs to. Typical uses are auto-filling a form from a code and checking that the\ncode in incoming data does not contradict the city.\n\nWHY IT IS MORE ACCURATE THAN PUBLIC DIRECTORIES. The code is recorded in the state\nregistry for every object, i.e. it comes from the same source as the address itself.\n\nWHAT IS NOT RETURNED. Houses. There are tens of thousands of them per code, and such a\nresponse does not answer the question that was asked.\n\nBILLING. This mode has its own, lowest tariff: no address search is performed — the\nservice reports which objects the code belongs to. A non-existent code (404) is not charged.",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "description": "Postal code — exactly six digits. Example: 420111",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "description": "How many objects to return.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success. Returns the objects the postal code belongs to.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodePostcodeResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodePostcodeResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodePostcodeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The postal code is missing or is not exactly six digits.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The API key is missing, expired or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Not enough credits on the balance to run the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such postal code in the registry. Not charged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "not_found",
+                  "title": "Ничего не найдено",
+                  "message": "По запросу «GET /api/…» данных нет. Если сомневаетесь в адресе метода — сверьтесь со спецификацией: /openapi/{идентификатор_сервиса}_ru.json.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded. Retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "in 42 seconds"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The geocoding service is temporarily unavailable. Not charged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "maintenance",
+                  "title": "Проводятся плановые работы",
+                  "message": "Выполнение запросов временно приостановлено на время плановых работ. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "title": "API error",
+        "required": [
+          "error",
+          "title",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Machine-readable reason code. Possible values:\n\n* `server_error` (500) — Сервис временно недоступен\n* `unauthorized` (401) — Требуется вход\n* `api_key_required` (401) — Нужен API-ключ\n* `account_not_activated` (402) — Аккаунт не активирован\n* `rate_limited_client` (429) — Слишком много запросов\n* `rate_limited_global` (429) — Высокая нагрузка на сервис\n* `provider_keys_exhausted` (429) — Сервис временно недоступен\n* `insufficient_credits` (402) — Недостаточно кредитов\n* `guest_quota_exhausted` (402) — Бесплатный лимит на сегодня исчерпан\n* `service_disabled` (503) — Проводятся плановые работы\n* `maintenance` (503) — Проводятся плановые работы\n* `guest_not_allowed` (402) — Нужна регистрация\n* `service_not_in_account_terms` (403) — Сервис не подключён\n* `bad_request` (400) — Некорректный запрос\n* `forbidden` (403) — Доступ запрещён\n* `not_found` (404) — Ничего не найдено\n* `method_not_allowed` (405) — Метод HTTP не поддерживается\n* `unsupported_media_type` (415) — Формат запроса не поддерживается\n* `not_implemented` (501) — Режим пока не реализован",
+            "example": "insufficient_credits"
+          },
+          "title": {
+            "type": "string",
+            "description": "Short title for a user interface.",
+            "example": "Insufficient credits"
+          },
+          "message": {
+            "type": "string",
+            "description": "Detailed explanation: what happened and what to do about it. Shown to the user as is."
+          },
+          "balance": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Current balance in credits. Filled in on 402 so that no extra balance request is needed; null otherwise."
+          },
+          "retryAfterSeconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "How many seconds to wait before retrying. Mirrors the Retry-After HTTP header. null when retrying will not help (for example, out of credits)."
+          },
+          "retryAfterText": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The same delay as a ready-to-show phrase. Saves clients from formatting it themselves."
+          }
+        },
+        "description": "A single response body for every rejection: validation errors, a missing key, an exhausted limit. Branch on the `error` field — it is a stable machine-readable code. `title` and `message` are meant for humans and their wording may change."
+      },
+      "GeocodeAdminHierarchy": {
+        "type": "object",
+        "properties": {
+          "region": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Субъект Российской Федерации — область, край, республика, город федерального значения."
+          },
+          "county": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Район субъекта или муниципальное образование — так, как записано в реестре."
+          },
+          "locality": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Населённый пункт — город, посёлок, село."
+          },
+          "street": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Улица (или иной адресообразующий элемент: проспект, переулок, микрорайон)."
+          },
+          "isEmpty": {
+            "type": "boolean",
+            "description": "true, если не заполнен ни один уровень — иерархии по объекту нет."
+          }
+        },
+        "description": "Административная иерархия объекта ИЗ РЕЕСТРА: что записано в его официальном адресе."
+      },
+      "GeocodeBatchItem": {
+        "required": [
+          "query",
+          "matches"
+        ],
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Исходная строка. Возвращается вместе с результатом, потому что склейка по позиции в массиве —\nпервое, что ломается при обработке пакета, и ломается молча."
+          },
+          "matches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeocodeMatch"
+            },
+            "description": "Найденные варианты. ПУСТОЙ СПИСОК — нормальный исход для отдельной строки: он означает\n«этот адрес не найден» и не оплачивается."
+          }
+        },
+        "description": "Результат геокодирования одной строки в пакетном запросе."
+      },
+      "GeocodeBatchRequest": {
+        "required": [
+          "queries"
+        ],
+        "type": "object",
+        "properties": {
+          "queries": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Адресные строки в том порядке, в каком их нужно вернуть. Пустые и бессмысленные элементы\nпакет не обрывают: у них будет свой результат с пустым списком совпадений."
+          },
+          "sizePerQuery": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Сколько вариантов возвращать на каждую строку. По умолчанию один — самый вероятный.",
+            "format": "int32"
+          },
+          "exactOnly": {
+            "type": "boolean",
+            "description": "Отдавать только точные попадания в дом. См. exactOnly."
+          }
+        },
+        "description": "Запрос пакетного прямого геокодинга: много адресов за один вызов."
+      },
+      "GeocodeBatchResponse": {
+        "required": [
+          "items",
+          "requested",
+          "found",
+          "billedUnits",
+          "attribution"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeocodeBatchItem"
+            },
+            "description": "Результаты СТРОГО в порядке запроса, по одному на каждую присланную строку. Порядок\nгарантирован: клиент почти всегда склеивает результат со своей таблицей по позиции."
+          },
+          "requested": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Сколько строк было прислано.",
+            "format": "int32"
+          },
+          "found": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Для скольких строк нашёлся хотя бы один вариант.",
+            "format": "int32"
+          },
+          "billedUnits": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Сколько единиц работы списано. Равно числу НАЙДЕННЫХ строк: ненайденные в пакете\nбесплатны так же, как поодиночке.",
+            "format": "int32"
+          },
+          "attribution": {
+            "type": "string",
+            "description": "Строка указания источника данных. Отображать обязательно."
+          }
+        },
+        "description": "Ответ пакетного прямого геокодинга."
+      },
+      "GeocodeBoundary": {
+        "required": [
+          "placeId",
+          "name",
+          "simplificationNotice"
+        ],
+        "type": "object",
+        "properties": {
+          "placeId": {
+            "type": "string",
+            "description": "Идентификатор образования."
+          },
+          "name": {
+            "type": "string",
+            "description": "Название с типом: «г Казань», «Вахитовский р-н»."
+          },
+          "label": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Полная подпись объекта, включая вышестоящие уровни."
+          },
+          "level": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Уровень в иерархии реестра: 1 — субъект РФ, 2–4 — районы, 5–6 — населённые пункты.",
+            "format": "int32"
+          },
+          "areaKm2": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Площадь в квадратных километрах, посчитанная по сфероиду. Первая и самая дешёвая проверка\nтого, что вернулось ожидаемое образование, а не однофамилец в другом регионе.",
+            "format": "double"
+          },
+          "center": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GeoPoint"
+              }
+            ],
+            "description": "Центр образования — точка, к которой относят объект в целом."
+          },
+          "geometry": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/JsonElement"
+              }
+            ],
+            "description": "Сама геометрия в GeoJSON: Polygon или MultiPolygon с координатами в порядке\n[долгота, широта] — так требует стандарт GeoJSON, и это единственное место контракта, где\nпорядок именно такой."
+          },
+          "simplificationNotice": {
+            "type": "string",
+            "description": "Постоянная оговорка об упрощении геометрии. Отдаётся всегда: клиент, который об этом не\nзнает, рано или поздно сделает по границе юридически значимый вывод."
+          }
+        },
+        "description": "Граница административного образования в формате GeoJSON — чтобы нарисовать её на своей карте\nили самостоятельно проверять попадание точек внутрь, не обращаясь к нам на каждую точку."
+      },
+      "GeocodeForwardResponse": {
+        "required": [
+          "query",
+          "matches",
+          "attribution"
+        ],
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Запрос в том виде, в каком он ушёл в поиск, — удобно для отладки на стороне клиента."
+          },
+          "matches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeocodeMatch"
+            },
+            "description": "Найденные варианты, самый вероятный первым. Пустым не бывает: пустой результат не доходит до\nклиента как успешный."
+          },
+          "attribution": {
+            "type": "string",
+            "description": "Строка указания источника данных. Отображать обязательно — этого требует лицензия."
+          }
+        },
+        "description": "Ответ прямого геокодинга."
+      },
+      "GeocodeMatch": {
+        "required": [
+          "point",
+          "layer",
+          "precision"
+        ],
+        "type": "object",
+        "properties": {
+          "placeId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Стабильный идентификатор объекта в государственном реестре адресов."
+          },
+          "label": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Готовая однострочная запись адреса — то, что показывают пользователю."
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Собственное имя объекта: название улицы или номер дома, смотря что найдено."
+          },
+          "houseNumber": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Номер дома вместе с корпусом или строением, если они есть."
+          },
+          "street": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Улица (или иной адресообразующий элемент)."
+          },
+          "postalCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Почтовый индекс из реестра."
+          },
+          "point": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GeoPoint"
+              }
+            ],
+            "description": "Координаты объекта."
+          },
+          "layer": {
+            "type": "string",
+            "description": "Что именно найдено: address — дом, street — улица, locality —\nнаселённый пункт, county — район, region — субъект РФ."
+          },
+          "precision": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GeocodePrecision"
+              }
+            ],
+            "description": "Чья это координата. См. GeocodePrecision."
+          },
+          "admin": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GeocodeAdminHierarchy"
+              }
+            ],
+            "description": "Административная иерархия объекта из реестра."
+          },
+          "parentPlaceId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Идентификатор родительского объекта: для дома — улица или населённый пункт, для улицы —\nнаселённый пункт. По нему запрашивается граница вышестоящего образования."
+          },
+          "distanceKm": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Расстояние от запрошенной точки до объекта, километры. Заполняется только там, где запрос\nбыл точкой, — в обратном геокодинге.",
+            "format": "double"
+          }
+        },
+        "description": "Один найденный адресный объект: координаты, разобранный адрес, реестровая иерархия и —\nобязательно — уровень точности координаты."
+      },
+      "GeocodePlaceResponse": {
+        "required": [
+          "placeId",
+          "place",
+          "billedUnits",
+          "attribution"
+        ],
+        "type": "object",
+        "properties": {
+          "placeId": {
+            "type": "string",
+            "description": "Запрошенный идентификатор."
+          },
+          "place": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GeocodeMatch"
+              }
+            ],
+            "description": "Карточка объекта."
+          },
+          "boundary": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GeocodeBoundary"
+              }
+            ],
+            "description": "Граница объекта в GeoJSON. Заполнена, только если её запросили И объект её имеет:\nу дома и улицы границы нет."
+          },
+          "billedUnits": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Сколько единиц работы списано: карточка плюс граница, если она вернулась.",
+            "format": "int32"
+          },
+          "attribution": {
+            "type": "string",
+            "description": "Строка указания источника данных. Отображать обязательно."
+          }
+        },
+        "description": "Ответ режима «карточка объекта по идентификатору»."
+      },
+      "GeocodePostcodeResponse": {
+        "required": [
+          "code",
+          "places",
+          "attribution"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Запрошенный индекс."
+          },
+          "places": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeocodeMatch"
+            },
+            "description": "Адресообразующие объекты с этим индексом, от общего к частному. Дома в выдачу не попадают:\nих на один индекс десятки тысяч, и такой ответ не отвечает на заданный вопрос."
+          },
+          "attribution": {
+            "type": "string",
+            "description": "Строка указания источника данных. Отображать обязательно."
+          }
+        },
+        "description": "Ответ режима «что относится к почтовому индексу»."
+      },
+      "GeocodePrecision": {
+        "enum": [
+          "exact",
+          "range",
+          "street",
+          "locality",
+          "area",
+          "none"
+        ],
+        "description": "Чья это координата — то есть насколько точно она указывает на запрошенный объект. Поле\nобязательное к прочтению: одна и та же пара чисел с разным уровнем точности означает\nсовершенно разное.\n\nЗначения:\n* `Exact` — Координата ЭТОГО САМОГО дома, взятая из данных. Годится для любой задачи, включая доставку до подъезда.\n* `Range` — Номер дома ВЫЧИСЛЕН, а не найден: геокодер знает координаты соседних домов на улице и расположил искомый между ними — либо совпадение оказалось неполным (спрашивали «13к2», в реестре дом заведён одной записью «13»). Практический смысл: попасть на нужную сторону улицы и в нужный квартал такой результат позволяет, указать конкретное здание — нет.\n* `Street` — Дома в данных нет — отдан центр улицы. Осмысленный ответ («улица найдена, дом не заведён»), но для навигации до подъезда непригоден.\n* `Locality` — Улицы в данных нет — отдан центр населённого пункта. Как адрес это уже не читается: «где-то в этом городе».\n* `Area` — Отдан центр района или региона. Самый грубый из содержательных уровней.\n* `None` — Уровень неизвестен — координате верить нельзя. Такие объекты до клиента не доходят; значение существует, чтобы неизвестное не трактовалось молча как точное."
+      },
+      "GeoPoint": {
+        "type": "object",
+        "properties": {
+          "latitude": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "longitude": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          }
+        }
+      },
+      "JsonElement": {}
+    },
+    "securitySchemes": {
+      "ApiKeyBearer": {
+        "type": "http",
+        "description": "The API key goes into the `Authorization: Bearer ak_…` header.\n\nKeys are created in your account: https://atlorium.com/Account/Manage/ApiKeys\n\nTo try it without registration and without being charged, use the demo key\n`ak_sandbox_demo_mockdata_v1` — it returns mock data and marks the response with\nthe `X-Atlorium-Sandbox: true` header.",
+        "scheme": "bearer",
+        "bearerFormat": "ak_…"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Forward Geocoding API",
+      "description": "API documentation for forward geocoding (coordinates from an address: free-form and structured search, place lookup by identifier, confidence score and match type). Coverage is limited to Russia. Requests with no result, and results below the confidence threshold, are not charged.",
+      "externalDocs": {
+        "description": "Try it in the web interface",
+        "url": "https://atlorium.com/geoGUI"
+      }
+    }
+  ],
+  "externalDocs": {
+    "description": "Service overview, examples and limitations",
+    "url": "https://atlorium.com/geoDescription"
+  }
+}

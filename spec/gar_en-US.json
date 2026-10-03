@@ -1,0 +1,1921 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "GAR/FIAS API",
+    "description": "API documentation for GAR/FIAS address directory (search, hierarchy, parameters).\n\n### Authorization\n\nEvery method requires an API key in the request header:\n\n```\nAuthorization: Bearer ak_your_key\n```\n\nKeys are created in your account, section [API keys](https://atlorium.com/Account/Manage/ApiKeys).\nThe API has no guest access: a request without a key returns 401.\n\n### Sandbox\n\nThe key `ak_sandbox_demo_mockdata_v1` works without registration and is never charged — it\nreturns realistic demo data and marks the response with the `X-Atlorium-Sandbox: true` header.\nUse it to validate your response parsing before plugging in a real key.\n\n### Billing\n\nCredits are charged **only for a successful response**. Rejections (400, 401, 402, 429, 5xx)\nare never charged. Prices and free quotas are on the [pricing page](https://atlorium.com/pricing);\nthe balance is topped up in your [account](https://atlorium.com/Account/Manage/Billing).\n\n### Errors\n\nEvery rejection returns **the same JSON structure** — see the `ApiError` schema at the bottom\nof this page. There is no need to parse a different shape per status code: the machine-readable\nreason always lives in the `error` field.\n\n### Useful links\n\n* [Service overview](https://atlorium.com/garDescription) — what it does, where the data comes from, what it does not cover\n* [Web interface](https://atlorium.com/garGUI) — the same lookups by hand, no key required\n* [Pricing and limits](https://atlorium.com/pricing)\n* [Account: API keys](https://atlorium.com/Account/Manage/ApiKeys)\n* [Account: balance and payments](https://atlorium.com/Account/Manage/Billing)\n* [Blog](https://atlorium.com/blog)\n* [Report a problem](https://atlorium.com/bug-report) · [support@atlorium.com](mailto:support@atlorium.com)\n* [Terms of Service](https://atlorium.com/terms-of-service) · [Privacy policy](https://atlorium.com/privacy-policy)",
+    "termsOfService": "https://atlorium.com/terms-of-service",
+    "contact": {
+      "name": "Atlorium",
+      "url": "https://atlorium.com/bug-report",
+      "email": "support@atlorium.com"
+    },
+    "license": {
+      "name": "Proprietary — see Terms of Service",
+      "url": "https://atlorium.com/terms-of-service"
+    },
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Current server"
+    }
+  ],
+  "paths": {
+    "/api/Gar/search": {
+      "get": {
+        "tags": [
+          "GAR/FIAS API"
+        ],
+        "summary": "Searches address objects by a free-form query string: splits it into parts and finds\nregions, localities, streets, houses, flats and rooms.",
+        "description": "Example requests:\nGET /api/gar/search?query=Москва ул Ленина д 5\nGET /api/gar/search?query=Самарская, Самара, Пушкина&limit=20",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "description": "Address search string. Format: free text, parts may be separated by commas. Examples:\n- Москва ул Ленина д 5\n- Самарская обл, Самара, Ленина, д 5 кв 18\n- ул Пушкина",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of results (10 by default, 100 at most).",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success. Returns matching address objects.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarSearchResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarSearchResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarSearchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters: query is missing or empty.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The API key is missing, expired or invalid. Add the request header: Authorization: Bearer {api_key}",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Not enough credits on the balance to run the request. Top up the balance in your account: /Account/Manage/Billing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded: the daily or per-minute quota for this service is used up. Retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "in 42 seconds"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The address directory request could not be completed. The failure is temporary —\nretry later; such a response is not charged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "server_error",
+                  "title": "Сервис временно недоступен",
+                  "message": "Запрос не может быть обработан прямо сейчас. Повторите попытку через несколько минут. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/Gar/object/{guid}": {
+      "get": {
+        "tags": [
+          "GAR/FIAS API"
+        ],
+        "summary": "Returns detailed information about a GAR object by its UUID (GUID). Includes the hierarchy\nand the object parameters (postal code, OKTMO, OKATO, tax office, KLADR).",
+        "parameters": [
+          {
+            "name": "guid",
+            "in": "path",
+            "description": "GAR object UUID (GUID). Format: a standard GUID (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx).",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success. Returns detailed information about the object.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarObjectDetailsResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarObjectDetailsResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarObjectDetailsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The GUID is missing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No object with the given GUID was found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "not_found",
+                  "title": "Ничего не найдено",
+                  "message": "По запросу «GET /api/…» данных нет. Если сомневаетесь в адресе метода — сверьтесь со спецификацией: /openapi/{идентификатор_сервиса}_ru.json.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The API key is missing, expired or invalid. Add the request header: Authorization: Bearer {api_key}",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Not enough credits on the balance to run the request. Top up the balance in your account: /Account/Manage/Billing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded: the daily or per-minute quota for this service is used up. Retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "in 42 seconds"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The address directory request could not be completed. The failure is temporary —\nretry later; such a response is not charged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "server_error",
+                  "title": "Сервис временно недоступен",
+                  "message": "Запрос не может быть обработан прямо сейчас. Повторите попытку через несколько минут. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/Gar/object/id/{objectId}": {
+      "get": {
+        "tags": [
+          "GAR/FIAS API"
+        ],
+        "summary": "Returns detailed information about an object by its numeric identifier (object_id).",
+        "parameters": [
+          {
+            "name": "objectId",
+            "in": "path",
+            "description": "Numeric identifier of the GAR object.",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success. Returns detailed information.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarObjectDetailsResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarObjectDetailsResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarObjectDetailsResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No object with the given ID was found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "not_found",
+                  "title": "Ничего не найдено",
+                  "message": "По запросу «GET /api/…» данных нет. Если сомневаетесь в адресе метода — сверьтесь со спецификацией: /openapi/{идентификатор_сервиса}_ru.json.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The API key is missing, expired or invalid. Add the request header: Authorization: Bearer {api_key}",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Not enough credits on the balance to run the request. Top up the balance in your account: /Account/Manage/Billing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded: the daily or per-minute quota for this service is used up. Retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "in 42 seconds"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The address directory request could not be completed. The failure is temporary —\nretry later; such a response is not charged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "server_error",
+                  "title": "Сервис временно недоступен",
+                  "message": "Запрос не может быть обработан прямо сейчас. Повторите попытку через несколько минут. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/Gar/children/{parentObjectId}": {
+      "get": {
+        "tags": [
+          "GAR/FIAS API"
+        ],
+        "summary": "Returns the child objects of a given parent. For example: houses on a street, flats in\na house, rooms in a flat.",
+        "parameters": [
+          {
+            "name": "parentObjectId",
+            "in": "path",
+            "description": "Identifier of the parent object.",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of results (50 by default, 500 at most).",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A list of child objects.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarChildrenResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarChildrenResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarChildrenResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The API key is missing, expired or invalid. Add the request header: Authorization: Bearer {api_key}",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Not enough credits on the balance to run the request. Top up the balance in your account: /Account/Manage/Billing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded: the daily or per-minute quota for this service is used up. Retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "in 42 seconds"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The address directory request could not be completed. The failure is temporary —\nretry later; such a response is not charged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "server_error",
+                  "title": "Сервис временно недоступен",
+                  "message": "Запрос не может быть обработан прямо сейчас. Повторите попытку через несколько минут. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/Gar/hierarchy/{objectId}": {
+      "get": {
+        "tags": [
+          "GAR/FIAS API"
+        ],
+        "summary": "Returns the object hierarchy — the path from the root (the region) down to the object.",
+        "parameters": [
+          {
+            "name": "objectId",
+            "in": "path",
+            "description": "Identifier of the object.",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The object hierarchy (an array of items from the root down to the object).",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarHierarchyResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarHierarchyResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarHierarchyResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The API key is missing, expired or invalid. Add the request header: Authorization: Bearer {api_key}",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Not enough credits on the balance to run the request. Top up the balance in your account: /Account/Manage/Billing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded: the daily or per-minute quota for this service is used up. Retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "in 42 seconds"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The address directory request could not be completed. The failure is temporary —\nretry later; such a response is not charged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "server_error",
+                  "title": "Сервис временно недоступен",
+                  "message": "Запрос не может быть обработан прямо сейчас. Повторите попытку через несколько минут. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/Gar/stats": {
+      "get": {
+        "tags": [
+          "GAR/FIAS API"
+        ],
+        "summary": "Returns statistics of the loaded GAR data: object counts by type, loaded regions and\nthe readiness state.",
+        "responses": {
+          "200": {
+            "description": "GAR database statistics.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarStatsResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarStatsResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarStatsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The API key is missing, expired or invalid. Add the request header: Authorization: Bearer {api_key}",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Not enough credits on the balance to run the request. Top up the balance in your account: /Account/Manage/Billing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded: the daily or per-minute quota for this service is used up. Retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "in 42 seconds"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The address directory request could not be completed. The failure is temporary —\nretry later; such a response is not charged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "server_error",
+                  "title": "Сервис временно недоступен",
+                  "message": "Запрос не может быть обработан прямо сейчас. Повторите попытку через несколько минут. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/Gar/regions": {
+      "get": {
+        "tags": [
+          "GAR/FIAS API"
+        ],
+        "summary": "Returns the list of available regions of the Russian Federation from the loaded GAR data.",
+        "responses": {
+          "200": {
+            "description": "A list of regions with codes and names.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GarRegionInfo"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GarRegionInfo"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GarRegionInfo"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The API key is missing, expired or invalid. Add the request header: Authorization: Bearer {api_key}",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Not enough credits on the balance to run the request. Top up the balance in your account: /Account/Manage/Billing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded: the daily or per-minute quota for this service is used up. Retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "in 42 seconds"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The address directory request could not be completed. The failure is temporary —\nretry later; such a response is not charged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "server_error",
+                  "title": "Сервис временно недоступен",
+                  "message": "Запрос не может быть обработан прямо сейчас. Повторите попытку через несколько минут. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/Gar/region/{regionCode}/stats": {
+      "get": {
+        "tags": [
+          "GAR/FIAS API"
+        ],
+        "summary": "Returns statistics for a single region: object counts by type.",
+        "parameters": [
+          {
+            "name": "regionCode",
+            "in": "path",
+            "description": "Region code (2 digits, for example \"77\" = Moscow).",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Region statistics with object counts by type.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarRegionStatsResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarRegionStatsResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarRegionStatsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The region code is missing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The API key is missing, expired or invalid. Add the request header: Authorization: Bearer {api_key}",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Not enough credits on the balance to run the request. Top up the balance in your account: /Account/Manage/Billing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded: the daily or per-minute quota for this service is used up. Retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "in 42 seconds"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The address directory request could not be completed. The failure is temporary —\nretry later; such a response is not charged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "server_error",
+                  "title": "Сервис временно недоступен",
+                  "message": "Запрос не может быть обработан прямо сейчас. Повторите попытку через несколько минут. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/Gar/suggest": {
+      "get": {
+        "tags": [
+          "GAR/FIAS API"
+        ],
+        "summary": "Returns autocomplete suggestions for fast address lookup. A lightweight version of search —\nreturns names and identifiers only.",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "description": "Autocomplete string (2 characters minimum).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of suggestions (7 by default, 20 at most).",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 7
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A list of autocomplete suggestions.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarSuggestResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarSuggestResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarSuggestResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The query is missing or too short.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The API key is missing, expired or invalid. Add the request header: Authorization: Bearer {api_key}",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Not enough credits on the balance to run the request. Top up the balance in your account: /Account/Manage/Billing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded: the daily or per-minute quota for this service is used up. Retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "in 42 seconds"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The address directory request could not be completed. The failure is temporary —\nretry later; such a response is not charged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "server_error",
+                  "title": "Сервис временно недоступен",
+                  "message": "Запрос не может быть обработан прямо сейчас. Повторите попытку через несколько минут. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "title": "API error",
+        "required": [
+          "error",
+          "title",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Machine-readable reason code. Possible values:\n\n* `server_error` (500) — Сервис временно недоступен\n* `unauthorized` (401) — Требуется вход\n* `api_key_required` (401) — Нужен API-ключ\n* `account_not_activated` (402) — Аккаунт не активирован\n* `rate_limited_client` (429) — Слишком много запросов\n* `rate_limited_global` (429) — Высокая нагрузка на сервис\n* `provider_keys_exhausted` (429) — Сервис временно недоступен\n* `insufficient_credits` (402) — Недостаточно кредитов\n* `guest_quota_exhausted` (402) — Бесплатный лимит на сегодня исчерпан\n* `service_disabled` (503) — Проводятся плановые работы\n* `maintenance` (503) — Проводятся плановые работы\n* `guest_not_allowed` (402) — Нужна регистрация\n* `service_not_in_account_terms` (403) — Сервис не подключён\n* `bad_request` (400) — Некорректный запрос\n* `forbidden` (403) — Доступ запрещён\n* `not_found` (404) — Ничего не найдено\n* `method_not_allowed` (405) — Метод HTTP не поддерживается\n* `unsupported_media_type` (415) — Формат запроса не поддерживается\n* `not_implemented` (501) — Режим пока не реализован",
+            "example": "insufficient_credits"
+          },
+          "title": {
+            "type": "string",
+            "description": "Short title for a user interface.",
+            "example": "Insufficient credits"
+          },
+          "message": {
+            "type": "string",
+            "description": "Detailed explanation: what happened and what to do about it. Shown to the user as is."
+          },
+          "balance": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Current balance in credits. Filled in on 402 so that no extra balance request is needed; null otherwise."
+          },
+          "retryAfterSeconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "How many seconds to wait before retrying. Mirrors the Retry-After HTTP header. null when retrying will not help (for example, out of credits)."
+          },
+          "retryAfterText": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The same delay as a ready-to-show phrase. Saves clients from formatting it themselves."
+          }
+        },
+        "description": "A single response body for every rejection: validation errors, a missing key, an exhausted limit. Branch on the `error` field — it is a stable machine-readable code. `title` and `message` are meant for humans and their wording may change."
+      },
+      "GarChildItem": {
+        "type": "object",
+        "properties": {
+          "objectId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Числовой идентификатор.",
+            "format": "int64"
+          },
+          "objectGuid": {
+            "type": "string",
+            "description": "UUID (GUID) объекта."
+          },
+          "displayName": {
+            "type": "string",
+            "description": "Отображаемое имя (например, \"д. 5 корп. 1\", \"кв. 18\")."
+          },
+          "objectType": {
+            "type": "string",
+            "description": "Тип объекта (\"дом\", \"квартира\", \"комната\", \"зем.участок\", \"машино-место\", \"адр.объект\")."
+          },
+          "houseType": {
+            "type": "string",
+            "description": "Тип объекта из справочника ГАР AS_HOUSE_TYPES, краткой формой:\n«д.» (дом), «гар.» (гараж), «влд.» (владение), «зд.» (здание),\n«д.влд.» (домовладение). Пусто у участков, машино-мест, помещений и\nадресообразующих объектов — у них своего справочника типов нет."
+          },
+          "postalCode": {
+            "type": "string",
+            "description": "Почтовый индекс (если доступен, для домов)."
+          }
+        },
+        "description": "Дочерний объект (дом, квартира, земельный участок и т.д.)."
+      },
+      "GarChildrenResponse": {
+        "type": "object",
+        "properties": {
+          "parentObjectId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Идентификатор родительского объекта.",
+            "format": "int64"
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GarChildItem"
+            },
+            "description": "Список дочерних объектов."
+          },
+          "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Общее количество дочерних объектов.",
+            "format": "int32"
+          },
+          "elapsedMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Время выполнения запроса в миллисекундах.",
+            "format": "int64"
+          }
+        },
+        "description": "Ответ со списком дочерних объектов."
+      },
+      "GarHierarchyItem": {
+        "type": "object",
+        "properties": {
+          "objectId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Числовой идентификатор объекта.",
+            "format": "int64"
+          },
+          "displayName": {
+            "type": "string",
+            "description": "Отображаемое имя объекта (например, \"ул Ленина\", \"д. 5\")."
+          }
+        },
+        "description": "Элемент иерархии адреса (один уровень пути от объекта к региону)."
+      },
+      "GarHierarchyResponse": {
+        "type": "object",
+        "properties": {
+          "objectId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Идентификатор запрошенного объекта.",
+            "format": "int64"
+          },
+          "path": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GarHierarchyItem"
+            },
+            "description": "Путь в иерархии от корня (региона) к объекту."
+          },
+          "elapsedMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Время выполнения запроса в миллисекундах.",
+            "format": "int64"
+          }
+        },
+        "description": "Ответ с иерархией объекта (путь от корня до объекта)."
+      },
+      "GarObjectDetailsResponse": {
+        "type": "object",
+        "properties": {
+          "objectId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Числовой идентификатор объекта.",
+            "format": "int64"
+          },
+          "objectGuid": {
+            "type": "string",
+            "description": "UUID (GUID) объекта."
+          },
+          "fullAddress": {
+            "type": "string",
+            "description": "Полный адрес объекта (из иерархии)."
+          },
+          "objectType": {
+            "type": "string",
+            "description": "Тип объекта."
+          },
+          "regionCode": {
+            "type": "string",
+            "description": "Код региона (2 цифры)."
+          },
+          "hierarchy": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GarHierarchyItem"
+            },
+            "description": "Иерархия: путь от корня (региона) к данному объекту."
+          },
+          "parameters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GarParamEntry"
+            },
+            "description": "Параметры объекта (индекс, ОКТМО, ОКАТО, ИФНС, КЛАДР и т.д.).\nПараметры наследуются от предков, если у объекта своих нет."
+          },
+          "elapsedMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Время выполнения запроса в миллисекундах.",
+            "format": "int64"
+          }
+        },
+        "description": "Детальная информация об одном объекте ГАР."
+      },
+      "GarParamEntry": {
+        "type": "object",
+        "properties": {
+          "typeId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Тип параметра (числовой идентификатор из справочника AS_PARAM_TYPES).",
+            "format": "int32"
+          },
+          "typeName": {
+            "type": "string",
+            "description": "Расшифровка типа параметра (например, \"Почтовый индекс\", \"ОКТМО\")."
+          },
+          "value": {
+            "type": "string",
+            "description": "Значение параметра (строка, формат зависит от типа)."
+          }
+        },
+        "description": "Параметр объекта ГАР (индекс, ОКТМО, ОКАТО, КЛАДР, ИФНС и т.д.)."
+      },
+      "GarRegionInfo": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Код региона (2 цифры, например \"77\")."
+          },
+          "name": {
+            "type": "string",
+            "description": "Наименование региона (например, \"Москва\", \"Самарская обл\")."
+          },
+          "objectId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Числовой идентификатор объекта региона в ГАР.",
+            "format": "int64"
+          }
+        },
+        "description": "Информация о регионе (субъекте РФ)."
+      },
+      "GarRegionStatsResponse": {
+        "type": "object",
+        "properties": {
+          "regionCode": {
+            "type": "string",
+            "description": "Код региона (2 цифры)."
+          },
+          "regionName": {
+            "type": "string",
+            "description": "Наименование региона."
+          },
+          "addressObjectCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество адресных объектов в регионе.",
+            "format": "int64"
+          },
+          "houseCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество домов в регионе.",
+            "format": "int64"
+          },
+          "apartmentCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество квартир/помещений в регионе.",
+            "format": "int64"
+          },
+          "roomCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество комнат в регионе.",
+            "format": "int64"
+          },
+          "steadCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество земельных участков в регионе.",
+            "format": "int64"
+          },
+          "carplaceCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество машино-мест в регионе.",
+            "format": "int64"
+          },
+          "nonResidentialCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество нежилых помещений: офисы, склады, цеха, торговые залы, павильоны,\nподвалы, котельные, погреба, рабочие участки и помещения без уточнения типа.",
+            "format": "int64"
+          },
+          "garageCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество гаражей.",
+            "format": "int64"
+          },
+          "unknownTypeCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество объектов, тип которых в реестре не указан.",
+            "format": "int64"
+          },
+          "breakdown": {
+            "type": "object",
+            "additionalProperties": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64"
+            },
+            "description": "Полная разбивка по каноническим типам объектов: «квартира», «комната»,\n«помещение», «гараж» и так далее, как их отдаёт геокодер."
+          },
+          "totalObjectCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Общее количество объектов реестра всех типов в регионе.",
+            "format": "int64"
+          },
+          "elapsedMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Время выполнения запроса в миллисекундах.",
+            "format": "int64"
+          }
+        },
+        "description": "Статистика по конкретному региону (субъекту РФ)."
+      },
+      "GarSearchResponse": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Исходная строка запроса."
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GarSearchResult"
+            },
+            "description": "Список найденных адресных объектов."
+          },
+          "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество найденных результатов.",
+            "format": "int32"
+          },
+          "elapsedMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Время выполнения запроса в миллисекундах.",
+            "format": "int64"
+          }
+        },
+        "description": "Ответ на поисковый запрос: список результатов с метаданными."
+      },
+      "GarSearchResult": {
+        "type": "object",
+        "properties": {
+          "fullAddress": {
+            "type": "string",
+            "description": "Полный адрес объекта, построенный из иерархии (PATH).\nПример: \"Самарская обл, г Самара, ул Ленина, д. 5\""
+          },
+          "objectType": {
+            "type": "string",
+            "description": "Тип объекта: \"адр.объект\", \"дом\", \"квартира\", \"комната\", \"зем.участок\", \"машино-место\"."
+          },
+          "objectGuid": {
+            "type": "string",
+            "description": "UUID (GUID) объекта в ГАР.\nАналог AOGUID/HOUSEGUID из старого ФИАС."
+          },
+          "objectId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Числовой идентификатор объекта (стабильный, не меняется при обновлении).",
+            "format": "int64"
+          },
+          "regionCode": {
+            "type": "string",
+            "description": "Двузначный код региона (например, \"77\" = Москва, \"63\" = Самарская обл.)."
+          },
+          "postalCode": {
+            "type": "string",
+            "description": "Почтовый индекс (6 цифр), если доступен."
+          },
+          "oktmo": {
+            "type": "string",
+            "description": "Код ОКТМО (8 или 11 цифр), если доступен."
+          },
+          "okato": {
+            "type": "string",
+            "description": "Код ОКАТО (до 11 цифр), если доступен."
+          }
+        },
+        "description": "Один результат поиска адреса в ГАР.\nСодержит полный адрес, идентификаторы и ключевые параметры объекта."
+      },
+      "GarStatsResponse": {
+        "type": "object",
+        "properties": {
+          "addressObjectCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество адресных объектов.",
+            "format": "int64"
+          },
+          "houseCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество домов.",
+            "format": "int64"
+          },
+          "apartmentCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество квартир и помещений.",
+            "format": "int64"
+          },
+          "roomCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество комнат.",
+            "format": "int64"
+          },
+          "steadCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество земельных участков.",
+            "format": "int64"
+          },
+          "carplaceCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество машино-мест.",
+            "format": "int64"
+          },
+          "nonResidentialCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество нежилых помещений: офисы, склады, цеха, торговые залы, павильоны,\nподвалы, котельные, погреба, рабочие участки и помещения без уточнения типа.",
+            "format": "int64"
+          },
+          "garageCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество гаражей.",
+            "format": "int64"
+          },
+          "unknownTypeCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество объектов, тип которых в реестре не указан.",
+            "format": "int64"
+          },
+          "breakdown": {
+            "type": "object",
+            "additionalProperties": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64"
+            },
+            "description": "Полная разбивка по каноническим типам объектов: «квартира», «комната»,\n«помещение», «гараж» и так далее, как их отдаёт геокодер."
+          },
+          "totalObjectCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Общее количество объектов реестра всех типов.",
+            "format": "int64"
+          },
+          "loadedRegions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Список загруженных регионов."
+          },
+          "isReady": {
+            "type": "boolean",
+            "description": "Признак: данные загружены и готовы к запросам."
+          },
+          "elapsedMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Время выполнения запроса в миллисекундах.",
+            "format": "int64"
+          }
+        },
+        "description": "Статистика базы данных ГАР."
+      },
+      "GarSuggestItem": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Отображаемый текст подсказки (полный адрес или имя объекта)."
+          },
+          "objectId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Числовой идентификатор объекта.",
+            "format": "int64"
+          },
+          "objectGuid": {
+            "type": "string",
+            "description": "UUID (GUID) объекта."
+          },
+          "objectType": {
+            "type": "string",
+            "description": "Тип объекта."
+          }
+        },
+        "description": "Один элемент подсказки автодополнения."
+      },
+      "GarSuggestResponse": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Исходный запрос."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GarSuggestItem"
+            },
+            "description": "Список подсказок."
+          },
+          "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество подсказок.",
+            "format": "int32"
+          },
+          "elapsedMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Время выполнения в миллисекундах.",
+            "format": "int64"
+          }
+        },
+        "description": "Ответ на запрос автодополнения."
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyBearer": {
+        "type": "http",
+        "description": "The API key goes into the `Authorization: Bearer ak_…` header.\n\nKeys are created in your account: https://atlorium.com/Account/Manage/ApiKeys\n\nTo try it without registration and without being charged, use the demo key\n`ak_sandbox_demo_mockdata_v1` — it returns mock data and marks the response with\nthe `X-Atlorium-Sandbox: true` header.",
+        "scheme": "bearer",
+        "bearerFormat": "ak_…"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "GAR/FIAS API",
+      "description": "API documentation for GAR/FIAS address directory (search, hierarchy, parameters).",
+      "externalDocs": {
+        "description": "Try it in the web interface",
+        "url": "https://atlorium.com/garGUI"
+      }
+    }
+  ],
+  "externalDocs": {
+    "description": "Service overview, examples and limitations",
+    "url": "https://atlorium.com/garDescription"
+  }
+}

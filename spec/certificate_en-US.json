@@ -1,0 +1,701 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "SSL Certificate Check API",
+    "description": "API documentation for SSL/TLS certificate validation.\n\n### Authorization\n\nEvery method requires an API key in the request header:\n\n```\nAuthorization: Bearer ak_your_key\n```\n\nKeys are created in your account, section [API keys](https://atlorium.com/Account/Manage/ApiKeys).\nThe API has no guest access: a request without a key returns 401.\n\n### Sandbox\n\nThe key `ak_sandbox_demo_mockdata_v1` works without registration and is never charged — it\nreturns realistic demo data and marks the response with the `X-Atlorium-Sandbox: true` header.\nUse it to validate your response parsing before plugging in a real key.\n\n### Billing\n\nCredits are charged **only for a successful response**. Rejections (400, 401, 402, 429, 5xx)\nare never charged. Prices and free quotas are on the [pricing page](https://atlorium.com/pricing);\nthe balance is topped up in your [account](https://atlorium.com/Account/Manage/Billing).\n\n### Errors\n\nEvery rejection returns **the same JSON structure** — see the `ApiError` schema at the bottom\nof this page. There is no need to parse a different shape per status code: the machine-readable\nreason always lives in the `error` field.\n\n### Useful links\n\n* [Service overview](https://atlorium.com/cDescription) — what it does, where the data comes from, what it does not cover\n* [Web interface](https://atlorium.com/cGUI) — the same lookups by hand, no key required\n* [Pricing and limits](https://atlorium.com/pricing)\n* [Account: API keys](https://atlorium.com/Account/Manage/ApiKeys)\n* [Account: balance and payments](https://atlorium.com/Account/Manage/Billing)\n* [Blog](https://atlorium.com/blog)\n* [Report a problem](https://atlorium.com/bug-report) · [support@atlorium.com](mailto:support@atlorium.com)\n* [Terms of Service](https://atlorium.com/terms-of-service) · [Privacy policy](https://atlorium.com/privacy-policy)",
+    "termsOfService": "https://atlorium.com/terms-of-service",
+    "contact": {
+      "name": "Atlorium",
+      "url": "https://atlorium.com/bug-report",
+      "email": "support@atlorium.com"
+    },
+    "license": {
+      "name": "Proprietary — see Terms of Service",
+      "url": "https://atlorium.com/terms-of-service"
+    },
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Current server"
+    }
+  ],
+  "paths": {
+    "/api/Certificate": {
+      "get": {
+        "tags": [
+          "SSL Certificate Check API"
+        ],
+        "summary": "Checks an SSL/TLS certificate by domain name and port.\nConnects to the server, retrieves the certificate, and returns detailed information about it.",
+        "description": "Example requests:\nGET /api/certificate?host=google.com\nGET /api/certificate?host=mail.server.com&port=993\n\nThe service establishes a TLS connection to the specified host and port,\nretrieves the certificate presented by the server, and analyzes its contents.",
+        "parameters": [
+          {
+            "name": "host",
+            "in": "query",
+            "description": "Server domain name to check.\n\nSupported formats:\n- Plain domain name: example.com\n- With subdomain: www.example.com\n- IP address: 192.168.1.1\n\nExamples: google.com, github.com, microsoft.com",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "port",
+            "in": "query",
+            "description": "Connection port (optional, defaults to 443).\n\nStandard ports:\n- 443: HTTPS (default)\n- 8443: Alternative HTTPS\n- 993: IMAPS (mail)\n- 995: POP3S (mail)\n- 465: SMTPS (outgoing mail)\n\nValid range: 1 to 65535",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 443
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response. Returns detailed information about the server's SSL certificate.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CertificateData"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CertificateData"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CertificateData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters:\n- host is not specified or empty\n- port is out of range [1, 65535]",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API key is missing, expired, or invalid.\nAdd the request header: Authorization: Bearer {api_key}",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Insufficient credits to process the request.\nTop up balance at: /Account/Manage/Billing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded: daily or per-minute quota for this service has been exhausted.\nRetry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "in 42 seconds"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error while checking the certificate:\n- Server is unreachable\n- Connection timeout expired\n- Server does not use TLS",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "server_error",
+                  "title": "Сервис временно недоступен",
+                  "message": "Запрос не может быть обработан прямо сейчас. Повторите попытку через несколько минут. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/Certificate/url": {
+      "get": {
+        "tags": [
+          "SSL Certificate Check API"
+        ],
+        "summary": "Checks an SSL/TLS certificate by full URL.\nAutomatically extracts the host and port from the URL and performs certificate validation.",
+        "description": "Example requests:\nGET /api/certificate/url?url=https://google.com\nGET /api/certificate/url?url=https://mail.server.com:993\n\nThis method is convenient when you want to check a certificate using a URL\nthat the user copied from a browser — without having to manually parse\nthe URL into host and port.",
+        "parameters": [
+          {
+            "name": "url",
+            "in": "query",
+            "description": "Full URL to check.\n\nSupported formats:\n- Full URL with protocol: https://example.com\n- URL with port: https://example.com:8443\n- URL with path: https://example.com:8443/api/v1\n\nExamples:\n- https://google.com\n- https://secure.bank.com:8443\n- https://api.github.com/users\n\nIf no port is specified, the standard port 443 is used.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response. Returns detailed information about the SSL certificate.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CertificateData"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CertificateData"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CertificateData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters:\n- url is not specified or empty\n- url is not a valid URL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API key is missing, expired, or invalid.\nAdd the request header: Authorization: Bearer {api_key}",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Insufficient credits to process the request.\nTop up balance at: /Account/Manage/Billing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded: daily or per-minute quota for this service has been exhausted.\nRetry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "in 42 seconds"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error while checking the certificate:\n- Server is unreachable\n- Failed to parse the URL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "server_error",
+                  "title": "Сервис временно недоступен",
+                  "message": "Запрос не может быть обработан прямо сейчас. Повторите попытку через несколько минут. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/Certificate/batch": {
+      "get": {
+        "tags": [
+          "SSL Certificate Check API"
+        ],
+        "summary": "Checks multiple SSL/TLS certificates simultaneously (batch check).\nAllows validating up to 10 hosts in a single request in parallel.",
+        "description": "Example requests:\nGET /api/certificate/batch?hosts=google.com,github.com,microsoft.com\nGET /api/certificate/batch?hosts=mail1.com,mail2.com&port=993\n\nAll checks are performed in parallel for fast results.\nIf one of the certificates is unavailable, the entire operation may fail.",
+        "parameters": [
+          {
+            "name": "hosts",
+            "in": "query",
+            "description": "Comma-separated list of domain names.\n\nFormat: host1,host2,host3\n\nConstraints:\n- Minimum 1 host\n- Maximum 10 hosts per request\n- Spaces around commas are ignored\n- Duplicate hosts are collapsed (you pay once per unique host)\n\nBILLING: per host. Each host is a separate certificate check, so a batch of N hosts\ncosts the same as N single checks and consumes N units of the free daily allowance.\nHosts that produced a verdict are billed (an unreachable server is also a verdict);\nif the whole request fails, nothing is charged.\n\nExamples:\n- google.com,github.com,microsoft.com\n- google.com, github.com, microsoft.com (with spaces — allowed)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "port",
+            "in": "query",
+            "description": "Connection port for ALL hosts (optional, defaults to 443).\n\nImportant: the same port is applied to all hosts in the list.\nIf different ports are needed, make separate requests.\n\nValid range: 1 to 65535",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 443
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response. Returns an array with certificate information for all hosts.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CertificateData"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CertificateData"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CertificateData"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters:\n- hosts is not specified or empty\n- port is out of range [1, 65535]\n- Host list is empty after parsing\n- More than 10 hosts in the request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API key is missing, expired, or invalid.\nAdd the request header: Authorization: Bearer {api_key}",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Insufficient credits to process the request.\nTop up balance at: /Account/Manage/Billing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded: daily or per-minute quota for this service has been exhausted.\nRetry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "in 42 seconds"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error while checking certificates:\n- One or more servers are unreachable\n- Connection timeout expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "server_error",
+                  "title": "Сервис временно недоступен",
+                  "message": "Запрос не может быть обработан прямо сейчас. Повторите попытку через несколько минут. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "title": "API error",
+        "required": [
+          "error",
+          "title",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Machine-readable reason code. Possible values:\n\n* `server_error` (500) — Сервис временно недоступен\n* `unauthorized` (401) — Требуется вход\n* `api_key_required` (401) — Нужен API-ключ\n* `account_not_activated` (402) — Аккаунт не активирован\n* `rate_limited_client` (429) — Слишком много запросов\n* `rate_limited_global` (429) — Высокая нагрузка на сервис\n* `provider_keys_exhausted` (429) — Сервис временно недоступен\n* `insufficient_credits` (402) — Недостаточно кредитов\n* `guest_quota_exhausted` (402) — Бесплатный лимит на сегодня исчерпан\n* `service_disabled` (503) — Проводятся плановые работы\n* `maintenance` (503) — Проводятся плановые работы\n* `guest_not_allowed` (402) — Нужна регистрация\n* `service_not_in_account_terms` (403) — Сервис не подключён\n* `bad_request` (400) — Некорректный запрос\n* `forbidden` (403) — Доступ запрещён\n* `not_found` (404) — Ничего не найдено\n* `method_not_allowed` (405) — Метод HTTP не поддерживается\n* `unsupported_media_type` (415) — Формат запроса не поддерживается\n* `not_implemented` (501) — Режим пока не реализован",
+            "example": "insufficient_credits"
+          },
+          "title": {
+            "type": "string",
+            "description": "Short title for a user interface.",
+            "example": "Insufficient credits"
+          },
+          "message": {
+            "type": "string",
+            "description": "Detailed explanation: what happened and what to do about it. Shown to the user as is."
+          },
+          "balance": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Current balance in credits. Filled in on 402 so that no extra balance request is needed; null otherwise."
+          },
+          "retryAfterSeconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "How many seconds to wait before retrying. Mirrors the Retry-After HTTP header. null when retrying will not help (for example, out of credits)."
+          },
+          "retryAfterText": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The same delay as a ready-to-show phrase. Saves clients from formatting it themselves."
+          }
+        },
+        "description": "A single response body for every rejection: validation errors, a missing key, an exhausted limit. Branch on the `error` field — it is a stable machine-readable code. `title` and `message` are meant for humans and their wording may change."
+      },
+      "CertificateChainItem": {
+        "type": "object",
+        "properties": {
+          "subject": {
+            "type": "string",
+            "description": "Владелец этого звена цепочки в виде отличительного имени (DN)."
+          },
+          "issuer": {
+            "type": "string",
+            "description": "Кто выпустил это звено. У корневого сертификата совпадает с subject —\nкорень подписывает сам себя, и на нём цепочка заканчивается."
+          },
+          "validFrom": {
+            "type": "string",
+            "description": "Начало срока действия звена (UTC).",
+            "format": "date-time"
+          },
+          "validTo": {
+            "type": "string",
+            "description": "Окончание срока действия звена (UTC). Промежуточный сертификат вполне может истечь\nраньше сертификата сайта — тогда соединение сломается, хотя сам сертификат сайта ещё годен.",
+            "format": "date-time"
+          },
+          "thumbprint": {
+            "type": "string",
+            "description": "Отпечаток звена — хеш в шестнадцатеричном виде."
+          },
+          "isValid": {
+            "type": "boolean",
+            "description": "Годно ли это конкретное звено. Негодное звено делает недоверенной всю цепочку."
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Претензии к этому звену, если оно признано негодным."
+          }
+        },
+        "description": "Одно звено цепочки доверия: сертификат сайта, промежуточный сертификат удостоверяющего\nцентра или корневой. Звенья идут от сертификата сайта к корню."
+      },
+      "CertificateData": {
+        "type": "object",
+        "properties": {
+          "isValid": {
+            "type": "boolean",
+            "description": "Главный вердикт: годен ли сертификат прямо сейчас. true — срок не истёк,\nцепочка доверия выстроилась и имя хоста сертификату соответствует. При false\nконкретные претензии перечислены в errors."
+          },
+          "expirationDate": {
+            "type": "string",
+            "description": "Дата и время (UTC) окончания срока действия. После этого момента браузеры и\nHTTP-клиенты начнут показывать предупреждение о небезопасном соединении.",
+            "format": "date-time"
+          },
+          "daysRemaining": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Сколько суток осталось до expirationDate. Отрицательное значение\nозначает, что срок уже истёк: −3 — сертификат просрочен три дня назад.\nИменно по этому полю удобно строить мониторинг: тревога при значении ниже 14.",
+            "format": "int32"
+          },
+          "issuer": {
+            "type": "string",
+            "description": "Удостоверяющий центр, выпустивший сертификат, в виде отличительного имени (DN).\nПример: CN=R11, O=Let's Encrypt, C=US."
+          },
+          "subject": {
+            "type": "string",
+            "description": "Владелец сертификата в виде отличительного имени (DN). У бесплатных сертификатов\nэто обычно только домен: CN=example.com. У сертификатов с проверкой\nорганизации сюда попадают ещё название компании и страна."
+          },
+          "subjectAlternativeNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Полный список доменов, которые покрывает сертификат (расширение SAN). Именно он,\nа не subject, определяет, для каких имён сертификат действителен.\nМожет содержать маски: example.com, www.example.com, *.api.example.com."
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Причины, по которым сертификат признан негодным: истёкший срок, несовпадение имени\nхоста, разрыв цепочки доверия, самоподписанность. Пустой список при\nisValid = true."
+          },
+          "tlsVersion": {
+            "type": "string",
+            "description": "Версия протокола, на которой удалось согласовать соединение: Tls13,\nTls12 и т.д. Версии ниже TLS 1.2 считаются устаревшими и небезопасными."
+          },
+          "validFrom": {
+            "type": "string",
+            "description": "Дата и время (UTC) начала срока действия — с этого момента сертификат годен.",
+            "format": "date-time"
+          },
+          "serialNumber": {
+            "type": "string",
+            "description": "Серийный номер, присвоенный удостоверяющим центром. Уникален в пределах этого центра;\nпо нему сертификат ищут в списках отзыва и в журналах Certificate Transparency."
+          },
+          "thumbprint": {
+            "type": "string",
+            "description": "Отпечаток — хеш сертификата в шестнадцатеричном виде. Однозначно идентифицирует\nконкретный сертификат: если между двумя проверками отпечаток изменился, сертификат\nперевыпустили или подменили."
+          },
+          "signatureAlgorithm": {
+            "type": "string",
+            "description": "Алгоритм подписи сертификата, например sha256RSA. Подпись на устаревшем\nSHA-1 современные браузеры отвергают."
+          },
+          "publicKeyAlgorithm": {
+            "type": "string",
+            "description": "Алгоритм открытого ключа: RSA или ECDSA."
+          },
+          "keySize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Длина ключа в битах. Сравнивать значения разных алгоритмов напрямую нельзя:\nу RSA приемлемый минимум — 2048, а у ECDSA 256 бит дают сопоставимую стойкость.",
+            "format": "int32"
+          },
+          "hasPrivateKey": {
+            "type": "boolean",
+            "description": "Есть ли рядом с сертификатом закрытый ключ. При проверке чужого сайта здесь всегда\nfalse: закрытый ключ наружу не отдаётся никогда и никем — это была бы полная\nкомпрометация сертификата."
+          },
+          "isSelfSigned": {
+            "type": "boolean",
+            "description": "Сертификат подписан сам собой, а не удостоверяющим центром. Такие сертификаты\nнормальны во внутренней сети и на тестовых стендах, но для публичного сайта означают,\nчто посетитель увидит предупреждение браузера."
+          },
+          "certificateChain": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CertificateChainItem"
+            },
+            "description": "Цепочка доверия от сертификата сайта к корневому сертификату. Разрыв в цепочке —\nчастая причина ошибки в браузере при формально живом сертификате: сервер забыли\nнастроить отдавать промежуточный сертификат."
+          },
+          "connectionTime": {
+            "pattern": "^-?(\\d+\\.)?\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?$",
+            "type": "string",
+            "description": "Сколько заняло установление TLS-соединения. Косвенно показывает удалённость сервера\nи его нагруженность; на вердикт не влияет."
+          },
+          "host": {
+            "type": "string",
+            "description": "Проверенный хост — доменное имя или IP-адрес."
+          },
+          "port": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Проверенный порт. По умолчанию 443; у почтовых и иных служб бывает свой.",
+            "format": "int32"
+          },
+          "checkedAt": {
+            "type": "string",
+            "description": "Момент, на который актуален результат проверки. По нему видно, насколько свежи\nсведения о сертификате; если нужен заведомо актуальный результат, есть режим\nпринудительной перепроверки.",
+            "format": "date-time"
+          }
+        },
+        "description": "Результат проверки SSL/TLS-сертификата одного хоста: срок действия, кто выдал, для каких\nдоменов годится, параметры ключа и цепочка доверия."
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyBearer": {
+        "type": "http",
+        "description": "The API key goes into the `Authorization: Bearer ak_…` header.\n\nKeys are created in your account: https://atlorium.com/Account/Manage/ApiKeys\n\nTo try it without registration and without being charged, use the demo key\n`ak_sandbox_demo_mockdata_v1` — it returns mock data and marks the response with\nthe `X-Atlorium-Sandbox: true` header.",
+        "scheme": "bearer",
+        "bearerFormat": "ak_…"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "SSL Certificate Check API",
+      "description": "API documentation for SSL/TLS certificate validation.",
+      "externalDocs": {
+        "description": "Try it in the web interface",
+        "url": "https://atlorium.com/cGUI"
+      }
+    }
+  ],
+  "externalDocs": {
+    "description": "Service overview, examples and limitations",
+    "url": "https://atlorium.com/cDescription"
+  }
+}

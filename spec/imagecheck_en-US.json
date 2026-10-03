@@ -1,0 +1,522 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "Image Analysis API",
+    "description": "API documentation for image analysis (user-generated content moderation). The check runs in THREE non-overlapping layers: content classification catches explicit photos, object labels catch a syringe, a firearm or casino chips (classification stays silent on such a picture — there is no nudity and no violence in it), and text ON the image catches a seller's phone number, a casino banner or an ad for forged documents (here BOTH previous layers stay silent — it is just letters). A disabled layer is therefore not \"weaker checking\" but a whole category of material passing through unnoticed. The overall decision (allow / review / block) is computed against YOUR stop lists, editable without a restart. Units of work range from 1 to 3: the base layer, text on the image and web search; a search that returned no matches is not charged. Images are not stored and faces are not recognised.\n\n### Authorization\n\nEvery method requires an API key in the request header:\n\n```\nAuthorization: Bearer ak_your_key\n```\n\nKeys are created in your account, section [API keys](https://atlorium.com/Account/Manage/ApiKeys).\nThe API has no guest access: a request without a key returns 401.\n\n### Sandbox\n\nThe key `ak_sandbox_demo_mockdata_v1` works without registration and is never charged — it\nreturns realistic demo data and marks the response with the `X-Atlorium-Sandbox: true` header.\nUse it to validate your response parsing before plugging in a real key.\n\n### Billing\n\nCredits are charged **only for a successful response**. Rejections (400, 401, 402, 429, 5xx)\nare never charged. Prices and free quotas are on the [pricing page](https://atlorium.com/pricing);\nthe balance is topped up in your [account](https://atlorium.com/Account/Manage/Billing).\n\n### Errors\n\nEvery rejection returns **the same JSON structure** — see the `ApiError` schema at the bottom\nof this page. There is no need to parse a different shape per status code: the machine-readable\nreason always lives in the `error` field.\n\n### Useful links\n\n* [Service overview](https://atlorium.com/imgDescription) — what it does, where the data comes from, what it does not cover\n* [Web interface](https://atlorium.com/imgGUI) — the same lookups by hand, no key required\n* [Pricing and limits](https://atlorium.com/pricing)\n* [Account: API keys](https://atlorium.com/Account/Manage/ApiKeys)\n* [Account: balance and payments](https://atlorium.com/Account/Manage/Billing)\n* [Blog](https://atlorium.com/blog)\n* [Report a problem](https://atlorium.com/bug-report) · [support@atlorium.com](mailto:support@atlorium.com)\n* [Terms of Service](https://atlorium.com/terms-of-service) · [Privacy policy](https://atlorium.com/privacy-policy)",
+    "termsOfService": "https://atlorium.com/terms-of-service",
+    "contact": {
+      "name": "Atlorium",
+      "url": "https://atlorium.com/bug-report",
+      "email": "support@atlorium.com"
+    },
+    "license": {
+      "name": "Proprietary — see Terms of Service",
+      "url": "https://atlorium.com/terms-of-service"
+    },
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Current server"
+    }
+  ],
+  "paths": {
+    "/api/imagecheck": {
+      "post": {
+        "tags": [
+          "Image Analysis API"
+        ],
+        "summary": "Analyses an image and returns a moderation decision together with the content breakdown.",
+        "description": "Example request:\n\nPOST /api/imagecheck\n{\n  \"image\": \"data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ...\",\n  \"includeText\": true,\n  \"includeWebSearch\": false\n}\n\nIMAGE FORMAT. Base64, raw or as a data URL. The limit is 7 MB decoded. JPEG, PNG,\nWEBP, BMP and GIF are accepted. PDF and video are not.\n\nHOW TO READ THE RESPONSE. First decision — what to do. Then flags — why: each one\ncarries a category, the source layer and concrete evidence. Only then the raw layers,\nif the decision needs to be verified or challenged.\n\nAN EMPTY text IS NOT AN ERROR. It means either that the image holds no readable text\nor that the layer was not requested. Which case it is can be seen from billedUnits.\n\nTHERE IS NO BATCH MODE by design: an image is megabytes in the request body.\n\nBILLING. From one to three units, see the controller description. An analysis that was\nnot performed is not charged at all.",
+        "requestBody": {
+          "description": "The image and the set of requested layers. The set determines both the price and the\ncoverage: each layer catches what the other two cannot see.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImageModerationRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImageModerationRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImageModerationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success. Returns the moderation decision and the image breakdown.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageModerationResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageModerationResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageModerationResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The image is missing, corrupted, exceeds 7 MB or has an unsupported format.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The API key is missing, expired or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Not enough credits on the balance to run the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded. Retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "in 42 seconds"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The service is temporarily unavailable. The request is not charged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "maintenance",
+                  "title": "Проводятся плановые работы",
+                  "message": "Выполнение запросов временно приостановлено на время плановых работ. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "title": "API error",
+        "required": [
+          "error",
+          "title",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Machine-readable reason code. Possible values:\n\n* `server_error` (500) — Сервис временно недоступен\n* `unauthorized` (401) — Требуется вход\n* `api_key_required` (401) — Нужен API-ключ\n* `account_not_activated` (402) — Аккаунт не активирован\n* `rate_limited_client` (429) — Слишком много запросов\n* `rate_limited_global` (429) — Высокая нагрузка на сервис\n* `provider_keys_exhausted` (429) — Сервис временно недоступен\n* `insufficient_credits` (402) — Недостаточно кредитов\n* `guest_quota_exhausted` (402) — Бесплатный лимит на сегодня исчерпан\n* `service_disabled` (503) — Проводятся плановые работы\n* `maintenance` (503) — Проводятся плановые работы\n* `guest_not_allowed` (402) — Нужна регистрация\n* `service_not_in_account_terms` (403) — Сервис не подключён\n* `bad_request` (400) — Некорректный запрос\n* `forbidden` (403) — Доступ запрещён\n* `not_found` (404) — Ничего не найдено\n* `method_not_allowed` (405) — Метод HTTP не поддерживается\n* `unsupported_media_type` (415) — Формат запроса не поддерживается\n* `not_implemented` (501) — Режим пока не реализован",
+            "example": "insufficient_credits"
+          },
+          "title": {
+            "type": "string",
+            "description": "Short title for a user interface.",
+            "example": "Insufficient credits"
+          },
+          "message": {
+            "type": "string",
+            "description": "Detailed explanation: what happened and what to do about it. Shown to the user as is."
+          },
+          "balance": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Current balance in credits. Filled in on 402 so that no extra balance request is needed; null otherwise."
+          },
+          "retryAfterSeconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "How many seconds to wait before retrying. Mirrors the Retry-After HTTP header. null when retrying will not help (for example, out of credits)."
+          },
+          "retryAfterText": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The same delay as a ready-to-show phrase. Saves clients from formatting it themselves."
+          }
+        },
+        "description": "A single response body for every rejection: validation errors, a missing key, an exhausted limit. Branch on the `error` field — it is a stable machine-readable code. `title` and `message` are meant for humans and their wording may change."
+      },
+      "ImageFlagSource": {
+        "enum": [
+          "safe_search",
+          "label",
+          "text"
+        ],
+        "description": "Какой слой анализа дал срабатывание. Поле нужно не для отчётности:\nот слоя зависит, что модератору смотреть. Срабатывание по тексту\nпоказывает саму надпись, срабатывание по метке — что на изображении,\nсрабатывание классификатора — категорию и её степень.\n\nЗначения:\n* `SafeSearch` — Классификация содержимого: нагота, откровенность, насилие, медицина, подделка.\n* `Label` — Метка предмета или сюжета, попавшая в стоп-лист.\n* `Text` — Слово или выражение из словаря, найденное в тексте НА изображении."
+      },
+      "ImageLabel": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Название на английском — так его возвращает классификатор."
+          },
+          "nameRu": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Русское название, если метка есть в нашем словаре перевода; иначе null.\nПоле необязательное: словарь охватывает частотные метки, а не весь набор."
+          },
+          "score": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Уверенность от 0 до 1. Значения ниже 0,5 в ответ не попадают.",
+            "format": "double"
+          }
+        },
+        "description": "Одна распознанная метка: что изображено и насколько уверенно."
+      },
+      "ImageLikelihood": {
+        "enum": [
+          "unknown",
+          "very_unlikely",
+          "unlikely",
+          "possible",
+          "likely",
+          "very_likely"
+        ],
+        "description": "Степень уверенности классификатора. Порядок значений — от «почти наверняка\nнет» к «почти наверняка да», и на этот порядок опирается сравнение с порогом\nсрабатывания: значение считается сработавшим, если оно не меньше порога.\n\nЗначения:\n* `Unknown` — Оценка не получена — признак не проверялся или ответ не содержал её.\n* `VeryUnlikely` — Почти наверняка нет.\n* `Unlikely` — Скорее нет.\n* `Possible` — Возможно. Пограничное значение: именно с него обычно начинают ручной разбор.\n* `Likely` — Скорее да.\n* `VeryLikely` — Почти наверняка да."
+      },
+      "ImageModerationDecision": {
+        "enum": [
+          "allow",
+          "review",
+          "block"
+        ],
+        "description": "Сводное решение по изображению. Три значения вместо двух — осознанный выбор:\nавтоматическое удаление по одному лишь машинному признаку даёт ложные\nсрабатывания на медицинских, исторических и новостных материалах, а полностью\nручная модерация не справляется с объёмом. Промежуточное\nreview отделяет «однозначно нельзя» от «нужен человек».\n\nЗначения:\n* `Allow` — Ничего из запрещённого не найдено — изображение можно публиковать.\n* `Review` — Есть основания для сомнений: показать модератору, а не удалять автоматически.\n* `Block` — Сработал признак высокой степени — публиковать без разбора нельзя."
+      },
+      "ImageModerationFlag": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "description": "Категория нарушения — ключ из файла стоп-листов (например, drugs,\nweapons, gambling, extremism, adult).\nНабор категорий редактируется без перевыкатки приложения, поэтому\nнеизвестное значение клиентский код должен переносить спокойно."
+          },
+          "title": {
+            "type": "string",
+            "description": "Человекочитаемое название категории на русском."
+          },
+          "source": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ImageFlagSource"
+              }
+            ],
+            "description": "Каким слоем анализа получено срабатывание."
+          },
+          "evidence": {
+            "type": "string",
+            "description": "Что именно сработало: распознанная метка, найденное в тексте выражение\nили название категории классификатора. Это и показывают модератору."
+          },
+          "severity": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ImageModerationDecision"
+              }
+            ],
+            "description": "Решение, которого требует ЭТО срабатывание. Итоговое решение по\nизображению — самое строгое из всех срабатываний."
+          }
+        },
+        "description": "Одно срабатывание фильтра — то, ради чего сервис существует."
+      },
+      "ImageModerationRequest": {
+        "type": "object",
+        "properties": {
+          "image": {
+            "type": "string",
+            "description": "Изображение в кодировке Base64 — «голым» base64 или data-URL вида\ndata:image/jpeg;base64,.... Обязательное поле. Предел — 7 МБ\nв декодированном виде; фотография с телефона укладывается с запасом.\nЧисло нецелое не случайно: картинка уезжает в base64 внутри JSON-запроса,\nу которого чужой потолок 10 МБ, а кодирование добавляет около 37 %.\nПринимаются растровые форматы (JPEG, PNG, WEBP, BMP, GIF); PDF и видео\nна вход не подаются."
+          },
+          "includeText": {
+            "type": "boolean",
+            "description": "Читать текст НА изображении и сверять его со словарём запрещённых\nвыражений. Включено по умолчанию, и отключать это стоит с открытыми\nглазами.\n\n⚠️ Что перестаёт ловиться при false: скриншот с контактом продавца\nзапрещённого, баннер казино, объявление о продаже документов,\nэкстремистский лозунг поверх нейтральной картинки. На таких изображениях\nНЕ срабатывают ни классификация содержимого, ни метки предметов —\nтам нет ни наготы, ни насилия, ни узнаваемого предмета. Текстовый слой\nдля них единственный. В российских реалиях на него приходится\nзначительная доля всего, что подлежит удалению.\n\nДобавляет ОДНУ единицу работы. Отсутствие текста на изображении —\nнормальный исход, он тарифицируется: работа по чтению выполнена."
+          },
+          "includeWebSearch": {
+            "type": "boolean",
+            "description": "Добавить поиск изображения в вебе: где ещё встречается эта картинка\nи какие страницы её содержат. Полезно против украденных фотографий\nв объявлениях и против контрафакта.\n\nСамый дорогой из слоёв, поэтому выключен по умолчанию. Добавляет ОДНУ\nединицу работы. Если поиск не дал совпадений, единица за него\nне списывается — платить за пустой ответ клиент не должен."
+          }
+        },
+        "description": "Запрос на анализ одного изображения."
+      },
+      "ImageModerationResult": {
+        "type": "object",
+        "properties": {
+          "decision": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ImageModerationDecision"
+              }
+            ],
+            "description": "Сводное решение: публиковать, показать модератору или не публиковать."
+          },
+          "flags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageModerationFlag"
+            },
+            "description": "Все сработавшие фильтры, самые строгие первыми. Пустой список при\nallow — нормальное и частое состояние."
+          },
+          "safeSearch": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ImageSafeSearch"
+              }
+            ],
+            "description": "Слой 1: классификация содержимого по пяти категориям."
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageLabel"
+            },
+            "description": "Слой 2: что изображено. Отсортировано по убыванию уверенности,\nне больше двадцати меток."
+          },
+          "text": {
+            "type": "string",
+            "description": "Слой 3: текст, найденный НА изображении, одной строкой с сохранением\nпереносов. Пустая строка означает либо что читаемого текста нет, либо\nчто слой не заказывался (includeText=false) — ни то ни другое\nне ошибка и не повод для повторного запроса. Какой именно случай\nперед вами, видно по billedUnits."
+          },
+          "webSearch": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ImageWebSearch"
+              }
+            ],
+            "description": "Результат поиска в вебе. null, если поиск не запрашивался ИЛИ\nне дал совпадений; во втором случае единица за него не списывается."
+          },
+          "billedUnits": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Сколько единиц работы фактически списано за этот запрос — от одной до трёх.\n\nОдна — обязательный базовый слой: метки предметов плюс классификация\nсодержимого (она выполняется вместе с метками и отдельной единицей\nне считается). Вторая — чтение текста на изображении, если оно заказано.\nТретья — поиск в вебе, и только если он вернул совпадения.\n\nПоле возвращается, чтобы расход можно было сверить, не заглядывая\nв биллинг, и чтобы разница между заказанным и списанным была видна\nсразу: слой, не вернувший данных, работой не является.",
+            "format": "int32"
+          },
+          "elapsedMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Время обработки на нашей стороне, миллисекунды.",
+            "format": "int64"
+          },
+          "message": {
+            "type": "string",
+            "description": "Пояснение к результату, когда оно есть: например, что часть слоёв\nне отработала и решение принято по остальным. Обычно пустая строка."
+          }
+        },
+        "description": "Полный результат анализа изображения."
+      },
+      "ImageSafeSearch": {
+        "type": "object",
+        "properties": {
+          "adult": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ImageLikelihood"
+              }
+            ],
+            "description": "Нагота, порнография."
+          },
+          "racy": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ImageLikelihood"
+              }
+            ],
+            "description": "Откровенные позы, полупрозрачная одежда, провокационность без наготы."
+          },
+          "violence": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ImageLikelihood"
+              }
+            ],
+            "description": "Насилие, кровь, увечья."
+          },
+          "medical": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ImageLikelihood"
+              }
+            ],
+            "description": "Медицинское изображение. Само по себе не нарушение: попадает в ответ,\nпотому что медицинский снимок часто ошибочно принимают за насилие,\nи модератору полезно видеть эту пометку рядом."
+          },
+          "spoof": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ImageLikelihood"
+              }
+            ],
+            "description": "Изображение изменено, чтобы выглядеть смешно или оскорбительно."
+          }
+        },
+        "description": "Результат классификации содержимого — пять независимых категорий.\nКаждая оценивается отдельно: изображение может быть одновременно\nбезобидным по одной категории и пограничным по другой."
+      },
+      "ImageWebMatch": {
+        "type": "object",
+        "properties": {
+          "pageUrl": {
+            "type": "string",
+            "description": "Адрес страницы, на которой встречается это изображение."
+          },
+          "fullMatch": {
+            "type": "boolean",
+            "description": "true — на странице найдена ровно эта картинка; false — визуально похожая\n(обрезанная, перекрашенная, с водяным знаком). Полное совпадение —\nпризнак прямого заимствования, частичное требует глазами."
+          }
+        },
+        "description": "Одно совпадение изображения в вебе."
+      },
+      "ImageWebSearch": {
+        "type": "object",
+        "properties": {
+          "fullMatchCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Сколько страниц содержат ровно это изображение.",
+            "format": "int32"
+          },
+          "partialMatchCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Сколько страниц содержат визуально похожее изображение.",
+            "format": "int32"
+          },
+          "bestGuess": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Наиболее вероятное описание изображения по данным веба — иногда точнее\nметок, потому что учитывает подписи на страницах. Может отсутствовать."
+          },
+          "matches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageWebMatch"
+            },
+            "description": "Найденные страницы, полные совпадения первыми. Не больше десяти."
+          }
+        },
+        "description": "Результат поиска изображения в вебе. Приходит, только если запрошен\nпараметром includeWebSearch."
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyBearer": {
+        "type": "http",
+        "description": "The API key goes into the `Authorization: Bearer ak_…` header.\n\nKeys are created in your account: https://atlorium.com/Account/Manage/ApiKeys\n\nTo try it without registration and without being charged, use the demo key\n`ak_sandbox_demo_mockdata_v1` — it returns mock data and marks the response with\nthe `X-Atlorium-Sandbox: true` header.",
+        "scheme": "bearer",
+        "bearerFormat": "ak_…"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Image Analysis API",
+      "description": "API documentation for image analysis (user-generated content moderation). The check runs in THREE non-overlapping layers: content classification catches explicit photos, object labels catch a syringe, a firearm or casino chips (classification stays silent on such a picture — there is no nudity and no violence in it), and text ON the image catches a seller's phone number, a casino banner or an ad for forged documents (here BOTH previous layers stay silent — it is just letters). A disabled layer is therefore not \"weaker checking\" but a whole category of material passing through unnoticed. The overall decision (allow / review / block) is computed against YOUR stop lists, editable without a restart. Units of work range from 1 to 3: the base layer, text on the image and web search; a search that returned no matches is not charged. Images are not stored and faces are not recognised.",
+      "externalDocs": {
+        "description": "Try it in the web interface",
+        "url": "https://atlorium.com/imgGUI"
+      }
+    }
+  ],
+  "externalDocs": {
+    "description": "Service overview, examples and limitations",
+    "url": "https://atlorium.com/imgDescription"
+  }
+}

@@ -1,0 +1,68 @@
+# Релиз по тегу вида v0.1.0.
+#
+# Packagist подхватывает новый тег сам (через webhook GitHub). Этот workflow сначала прогоняет тесты,
+# сверяет тег с BaseClient::VERSION, а затем публикует GitHub Release с zip-архивом для проектов без
+# Composer (1С-Битрикс). В архиве одна папка atlorium-php/: src/, autoload.php, composer.json,
+# README, CHANGELOG и LICENSE — подключение: require_once '.../atlorium-php/autoload.php'.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        php: ['7.4', '8.4']
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: curl, json, mbstring
+          coverage: none
+          tools: composer:v2
+      - name: Tag matches BaseClient::VERSION
+        run: |
+          version=$(php -r 'require "autoload.php"; echo \Atlorium\BaseClient::VERSION;')
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "Тег $GITHUB_REF_NAME не совпадает с версией $version в src/BaseClient.php"
+            exit 1
+          fi
+      - name: Works without Composer
+        run: php tests/standalone.php
+      - name: Install dependencies
+        run: composer update --prefer-dist --no-interaction --no-progress
+      - name: PHPUnit
+        run: vendor/bin/phpunit
+
+  release:
+    needs: tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build zip
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p build/atlorium-php
+          cp -r src autoload.php composer.json README.md README.en.md CHANGELOG.md LICENSE build/atlorium-php/
+          (cd build && zip -r -X "atlorium-php-$version.zip" atlorium-php)
+          unzip -l "build/atlorium-php-$version.zip"
+          unzip -l "build/atlorium-php-$version.zip" | grep -q ' atlorium-php/autoload.php$'
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          gh release create "$GITHUB_REF_NAME" "build/atlorium-php-$version.zip" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes

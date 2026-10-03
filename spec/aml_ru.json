@@ -1,0 +1,769 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "API AML-скоринга",
+    "description": "Документация для API AML-скоринга (скрининг крипто-кошелька по адресу и сети: балл риска, санкции/PEP, источники и назначение средств, контрагенты; валидация ввода).\n\n### Авторизация\n\nВсе методы требуют API-ключ в заголовке запроса:\n\n```\nAuthorization: Bearer ak_ваш_ключ\n```\n\nКлючи создаются в личном кабинете, раздел [API-ключи](https://atlorium.com/Account/Manage/ApiKeys).\nГостевого доступа у API нет: запрос без ключа получает 401.\n\n### Песочница\n\nКлюч `ak_sandbox_demo_mockdata_v1` работает без регистрации и без списаний — возвращает\nправдоподобные демо-данные и помечает ответ заголовком `X-Atlorium-Sandbox: true`.\nУдобно проверить разбор ответа до подключения настоящего ключа.\n\n### Тарификация\n\nКредиты списываются **только за успешный ответ**. Отказы (400, 401, 402, 429, 5xx)\nне тарифицируются. Цены и бесплатные квоты — на странице [тарифов](https://atlorium.com/pricing),\nбаланс пополняется в [личном кабинете](https://atlorium.com/Account/Manage/Billing).\n\n### Ошибки\n\nЛюбой отказ возвращает **одну и ту же структуру** JSON — схема `ApiError` внизу страницы.\nРазбирать разные форматы под разные коды не нужно: машинный код причины всегда лежит\nв поле `error`.\n\n### Полезные ссылки\n\n* [Описание сервиса](https://atlorium.com/amlDescription) — что умеет, откуда данные, где границы применимости\n* [Веб-интерфейс](https://atlorium.com/amlGUI) — те же расчёты руками, без ключа\n* [Тарифы и лимиты](https://atlorium.com/pricing)\n* [Личный кабинет: API-ключи](https://atlorium.com/Account/Manage/ApiKeys)\n* [Личный кабинет: баланс и платежи](https://atlorium.com/Account/Manage/Billing)\n* [Блог](https://atlorium.com/blog) — разборы задач и примеры интеграции\n* [Сообщить о проблеме](https://atlorium.com/bug-report) · [support@atlorium.com](mailto:support@atlorium.com)\n* [Оферта](https://atlorium.com/terms-of-service) · [Политика обработки информации](https://atlorium.com/privacy-policy)",
+    "termsOfService": "https://atlorium.com/terms-of-service",
+    "contact": {
+      "name": "Atlorium",
+      "url": "https://atlorium.com/bug-report",
+      "email": "support@atlorium.com"
+    },
+    "license": {
+      "name": "Проприетарная — использование по оферте",
+      "url": "https://atlorium.com/terms-of-service"
+    },
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Текущий сервер (адрес берётся из строки браузера)"
+    }
+  ],
+  "paths": {
+    "/api/Aml/screen": {
+      "post": {
+        "tags": [
+          "API AML-скоринга"
+        ],
+        "summary": "Выполняет AML-скрининг криптокошелька по адресу и сети.",
+        "description": "Пример запроса:\nPOST /api/aml/screen\n{ \"walletAddress\": \"0x26a5919cd0392df875a53873b0323c42094bb216\", \"blockchain\": \"BNB\" }\n\nТарификация: списывается только успешный скрининг. Если сервис временно недоступен или\nвходные данные некорректны, списания не происходит.",
+        "requestBody": {
+          "description": "Параметры скрининга: адрес кошелька (walletAddress) и код сети (blockchain), например\n\"ETH\", \"BTC\", \"BNB\", \"TRX\", \"SOL\".",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AmlScreeningRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AmlScreeningRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AmlScreeningRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Успешный ответ. Возвращает карточку AML-скрининга кошелька.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AmlScreeningResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AmlScreeningResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AmlScreeningResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Адрес/сеть не указаны или имеют неверный формат (неподдерживаемая сеть, некорректный адрес).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API-ключ отсутствует, просрочен или недействителен.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Недостаточно кредитов на балансе для выполнения запроса.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Превышен rate-limit. Повторите запрос позже.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "через 42 секунды"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Сервис AML-скоринг временно недоступен.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "maintenance",
+                  "title": "Проводятся плановые работы",
+                  "message": "Выполнение запросов временно приостановлено на время плановых работ. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/Aml/validate": {
+      "get": {
+        "tags": [
+          "API AML-скоринга"
+        ],
+        "summary": "Проверяет входные данные AML-скрининга: поддержку сети и формат адреса.\nПроверяет формат, а не существование адреса в блокчейне.",
+        "description": "Пример запроса:\nGET /api/aml/validate?walletAddress=0x26a5919cd0392df875a53873b0323c42094bb216&blockchain=BNB",
+        "parameters": [
+          {
+            "name": "walletAddress",
+            "in": "query",
+            "description": "Проверяемый адрес кошелька.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "blockchain",
+            "in": "query",
+            "description": "Код сети (например, \"ETH\", \"BTC\", \"BNB\").",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Результат проверки формата (valid + нормализованные адрес/сеть).",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AmlValidationResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AmlValidationResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AmlValidationResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Адрес или сеть не указаны.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API-ключ отсутствует, просрочен или недействителен.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Недостаточно кредитов на балансе для выполнения запроса.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Превышен rate-limit. Повторите запрос позже.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "через 42 секунды"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AmlCounterparty": {
+        "type": "object",
+        "properties": {
+          "entityName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Название контрагента (например, имя биржи). \"unknown\" или пусто, если не атрибутирован."
+          },
+          "entityType": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Тип контрагента (например, \"Exchange\", \"Mixer\"). Пусто/\"unknown\", если неизвестен."
+          },
+          "entitySubtype": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Подтип контрагента. Пусто, если неизвестен."
+          },
+          "riskLevel": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Уровень риска контрагента: \"low\", \"medium\", \"high\", \"severe\" или \"unknown\" (не определён)."
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Категории риска контрагента (например, [\"mixer\"], [\"sanctioned\"], [\"unknown\"])."
+          },
+          "receivedUsd": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Сколько получено ОТ контрагента в долларах США (если оценено). Иначе null.",
+            "format": "double"
+          },
+          "sentUsd": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Сколько отправлено контрагенту в долларах США (если оценено). Иначе null.",
+            "format": "double"
+          },
+          "percentage": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Доля контрагента в общей экспозиции кошелька (в процентах, 0–100).",
+            "format": "double"
+          },
+          "isDirect": {
+            "type": "boolean",
+            "description": "true, если связь прямая (без промежуточных адресов)."
+          },
+          "country": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Код страны контрагента (ISO-3166 alpha-2). Пусто, если неизвестен."
+          }
+        },
+        "description": "Контрагент кошелька — организация или адрес, с которым он связан напрямую или косвенно,\nс уровнем риска, категориями и денежными оборотами."
+      },
+      "AmlFundExposure": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Категория контрагента (нормализованный код): например, \"exchange_licensed\" (лицензированная\nбиржа), \"mixer\" (миксер), \"darknet\", \"scam\", \"sanctioned\", \"gambling\", \"p2p\". По ней видно,\nс каким типом сущностей связаны средства."
+          },
+          "percentage": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Доля этой категории в общей экспозиции (в процентах, 0–100).",
+            "format": "double"
+          },
+          "amountUsd": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Сумма по этой строке экспозиции в долларах США (если оценена). Иначе null.",
+            "format": "double"
+          },
+          "entityName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Название организации-контрагента (например, \"Sideshift.ai\"). Пусто, если неизвестно."
+          },
+          "entityType": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Тип организации (например, \"Exchange\", \"Mixer\", \"Wallet\"). Пусто, если неизвестен."
+          },
+          "entitySubtype": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Подтип организации (например, \"Optional KYC and AML\"). Пусто, если неизвестен."
+          },
+          "hops": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Число «прыжков» (hops) до контрагента: 0/1 — прямая связь, больше — косвенная (через\nпромежуточные адреса). null, если не определено.",
+            "format": "int32"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Человеко-читаемое описание строки экспозиции (например, \"Exchange / Optional KYC\")."
+          },
+          "isDirect": {
+            "type": "boolean",
+            "description": "true, если это прямая связь (контрагент — непосредственный отправитель/получатель)."
+          },
+          "exposureDirection": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Направление экспозиции: \"incoming\" (средства пришли от контрагента) или \"outgoing\"\n(ушли к контрагенту). Дублирует принадлежность к Source/Destination, но удобно при\nобъединении списков в одну таблицу."
+          },
+          "exposureType": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Тип экспозиции: \"direct\" (прямая) или \"indirect\" (косвенная, через цепочку адресов)."
+          },
+          "country": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Код страны контрагента в формате ISO-3166 alpha-2 (например, \"KN\"). Пусто, если неизвестен."
+          }
+        },
+        "description": "Одна строка экспозиции по средствам — где (по категории контрагента) кошелёк получал или\nотправлял средства, с долей и суммой. Используется и в sourceOfFunds,\nи в destinationOfFunds."
+      },
+      "AmlNetworkEdge": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Идентификатор узла-источника перевода."
+          },
+          "target": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Идентификатор узла-получателя перевода."
+          },
+          "amountUsd": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Сумма перевода в долларах США (если оценена). Иначе null.",
+            "format": "double"
+          }
+        },
+        "description": "Ребро графа связей — перевод средств между двумя узлами AmlNetworkNode."
+      },
+      "AmlNetworkNode": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Идентификатор узла (адрес или внутренний id сущности)."
+          },
+          "label": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Подпись узла для отображения (имя организации или сокращённый адрес)."
+          },
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Тип узла (например, \"exchange\", \"wallet\", \"mixer\")."
+          },
+          "riskLevel": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Уровень риска узла (\"low\"/\"medium\"/\"high\"/\"unknown\")."
+          }
+        },
+        "description": "Узел графа связей кошелька — адрес или организация в сети контактов. Содержит минимум,\nнужный для отрисовки графа; подробности по контрагентам — в AmlCounterparty."
+      },
+      "AmlScreeningRequest": {
+        "type": "object",
+        "properties": {
+          "walletAddress": {
+            "type": "string",
+            "description": "Адрес криптокошелька для проверки (обязателен)."
+          },
+          "blockchain": {
+            "type": "string",
+            "description": "Сеть (блокчейн) адреса: \"BTC\", \"ETH\", \"BNB\", \"TRX\", \"SOL\" и т.д. (обязательно).\nДолжна входить в список поддерживаемых сетей AmlBlockchains."
+          }
+        },
+        "description": "Параметры запроса AML-скрининга: адрес кошелька и сеть, в которой его проверять."
+      },
+      "AmlScreeningResult": {
+        "type": "object",
+        "properties": {
+          "walletAddress": {
+            "type": "string",
+            "description": "Проверённый адрес криптокошелька (в том виде, в котором по нему выполнялся скрининг).\nДля EVM-сетей это «0x…» + 40 hex-символов; для других сетей формат свой."
+          },
+          "blockchain": {
+            "type": "string",
+            "description": "Идентификатор сети (блокчейна), в которой выполнялся скрининг: например, \"BTC\", \"ETH\",\n\"BNB\", \"TRX\", \"SOL\". Полный список поддерживаемых сетей — см. AmlBlockchains."
+          },
+          "screeningType": {
+            "type": "string",
+            "description": "Тип скрининга. Для проверки кошелька всегда \"WALLET_SCREENING\". Поле оставлено в ответе,\nчтобы клиент мог единообразно различать режимы, если в будущем добавятся другие."
+          },
+          "riskScore": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Нормализованный балл риска от 0 до 100, где 0 — риск не обнаружен, 100 — максимальный риск.\nЭто сводная оценка по всей экспозиции кошелька (источники/назначение средств, контрагенты,\nсанкции). Для принятия решения удобнее опираться на severity — человеко-понятный\nуровень, выведенный из этого балла.",
+            "format": "int32"
+          },
+          "severity": {
+            "type": "string",
+            "description": "Уровень серьёзности риска — человеко-понятная категория поверх riskScore.\nВозможные значения: \"UNKNOWN\" (недостаточно данных), \"LOW\" (низкий), \"MEDIUM\" (средний),\n\"HIGH\" (высокий), \"CRITICAL\" (критический). Удобно использовать для цветовой индикации и\nбизнес-правил (например, блокировать платёж при HIGH/CRITICAL)."
+          },
+          "status": {
+            "type": "string",
+            "description": "Статус скрининга: \"SCREENED\" (проверка выполнена, результат готов), \"PENDING\" (поставлен\nв очередь — для on-demand обычно не встречается), \"ERROR\" (проверку выполнить не удалось).\nВ норме при успешном ответе сервиса здесь \"SCREENED\"."
+          },
+          "summary": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Краткая человеко-читаемая сводка результата (например, «Риск не обнаружен (0/100)»).\nГотова к показу пользователю как заголовок результата."
+          },
+          "dominantRiskCategory": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Доминирующая категория риска — категория с наибольшим вкладом в итоговый балл\n(например, \"mixer\", \"sanctioned\", \"scam\", \"darknet\"). null, если выраженной\nвысокорисковой категории нет."
+          },
+          "sanctionsHit": {
+            "type": "boolean",
+            "description": "true, если у кошелька обнаружена прямая или косвенная экспозиция на санкционные адреса/\nорганизации. Сильнейший стоп-сигнал: при true сделку, как правило, проводить нельзя."
+          },
+          "pepCounterparty": {
+            "type": "boolean",
+            "description": "true, если среди контрагентов кошелька есть связь с публичным должностным лицом (PEP —\nPolitically Exposed Person). Повод для усиленной проверки (enhanced due diligence)."
+          },
+          "totalValueUsd": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Суммарный оборот кошелька в долларах США, если он оценён. Иначе null.",
+            "format": "double"
+          },
+          "feeUsd": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Суммарные комиссии по операциям кошелька в долларах США (если оценены). Иначе null.",
+            "format": "double"
+          },
+          "sourceOfFunds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AmlFundExposure"
+            },
+            "description": "Источники средств — откуда на кошелёк приходили деньги, в разбивке по категориям\nконтрагентов и долям. Помогает понять «происхождение» средств (source of funds).\nПусто, если входящих операций нет или разбивка по ним недоступна."
+          },
+          "destinationOfFunds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AmlFundExposure"
+            },
+            "description": "Назначение средств — куда с кошелька уходили деньги, в разбивке по категориям контрагентов\nи долям (destination of funds). Пусто, если исходящих операций нет или они не детализированы."
+          },
+          "counterpartyConnections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AmlCounterparty"
+            },
+            "description": "Контрагенты кошелька — организации/адреса, с которыми он напрямую или косвенно связан,\nс уровнем риска, категориями и оборотами. Пусто, если связей не выявлено."
+          },
+          "networkNodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AmlNetworkNode"
+            },
+            "description": "Узлы графа связей кошелька (для визуализации сети контактов). Каждый узел — адрес/\nорганизация. Пусто, если граф связей по кошельку недоступен."
+          },
+          "networkEdges": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AmlNetworkEdge"
+            },
+            "description": "Рёбра графа связей кошелька — переводы между узлами networkNodes.\nПусто, если граф связей по кошельку недоступен."
+          },
+          "elapsedMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Время выполнения запроса в миллисекундах.",
+            "format": "int64"
+          }
+        },
+        "description": "Полная карточка результата AML-скрининга криптокошелька одним плоским набором полей.\nОбъединяет всё, что известно про адрес: нормализованный\nбалл риска, уровень серьёзности, статус скрининга, разбивку источников и назначения средств\nпо категориям, список контрагентов, флаги санкций/PEP и денежные обороты в USD.\n\n\nПример. Для адреса 0x26a5...b216 в сети BNB: riskScore = 0,\nseverity = \"LOW\", status = \"SCREENED\",\nsanctionsHit = false, а в destinationOfFunds — запись о\nлицензированной бирже со 100% исходящей экспозиции."
+      },
+      "AmlValidationResult": {
+        "type": "object",
+        "properties": {
+          "normalizedAddress": {
+            "type": "string",
+            "description": "Нормализованный адрес (убраны пробелы; для EVM-сетей приведён к нижнему регистру)."
+          },
+          "normalizedBlockchain": {
+            "type": "string",
+            "description": "Нормализованный код сети (верхний регистр), как он будет передан в скрининг."
+          },
+          "isValid": {
+            "type": "boolean",
+            "description": "true, если входные данные прошли локальную проверку формата (сеть поддерживается, адрес\nнепустой и правдоподобен по длине/составу). Это проверка ФОРМАТА, а не существования адреса."
+          },
+          "message": {
+            "type": "string",
+            "description": "Понятное человеку пояснение результата (что не так, либо «входные данные корректны»)."
+          }
+        },
+        "description": "Результат предварительной проверки входных данных — адреса и сети. Проверяются только\nподдержка сети и формат адреса, а НЕ существование адреса в блокчейне. Проверка бесплатна\nи позволяет отсеять заведомо некорректный ввод до платного скрининга."
+      },
+      "ApiError": {
+        "title": "Ошибка API",
+        "required": [
+          "error",
+          "title",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Машинный код причины отказа. Возможные значения:\n\n* `server_error` (500) — Сервис временно недоступен\n* `unauthorized` (401) — Требуется вход\n* `api_key_required` (401) — Нужен API-ключ\n* `account_not_activated` (402) — Аккаунт не активирован\n* `rate_limited_client` (429) — Слишком много запросов\n* `rate_limited_global` (429) — Высокая нагрузка на сервис\n* `provider_keys_exhausted` (429) — Сервис временно недоступен\n* `insufficient_credits` (402) — Недостаточно кредитов\n* `guest_quota_exhausted` (402) — Бесплатный лимит на сегодня исчерпан\n* `service_disabled` (503) — Проводятся плановые работы\n* `maintenance` (503) — Проводятся плановые работы\n* `guest_not_allowed` (402) — Нужна регистрация\n* `service_not_in_account_terms` (403) — Сервис не подключён\n* `bad_request` (400) — Некорректный запрос\n* `forbidden` (403) — Доступ запрещён\n* `not_found` (404) — Ничего не найдено\n* `method_not_allowed` (405) — Метод HTTP не поддерживается\n* `unsupported_media_type` (415) — Формат запроса не поддерживается\n* `not_implemented` (501) — Режим пока не реализован",
+            "example": "insufficient_credits"
+          },
+          "title": {
+            "type": "string",
+            "description": "Короткий заголовок для интерфейса.",
+            "example": "Недостаточно кредитов"
+          },
+          "message": {
+            "type": "string",
+            "description": "Подробное объяснение: что произошло и что с этим делать. Показывается пользователю целиком."
+          },
+          "balance": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Текущий баланс в кредитах. Заполняется при 402, чтобы не делать отдельный запрос за балансом; в остальных случаях null."
+          },
+          "retryAfterSeconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Через сколько секунд имеет смысл повторить запрос. Дублирует HTTP-заголовок Retry-After. null — если повтор не поможет (например, кончились кредиты)."
+          },
+          "retryAfterText": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Та же задержка готовой фразой — «через 2 мин 30 с». Чтобы клиентам не приходилось самим склонять минуты и секунды."
+          }
+        },
+        "description": "Единое тело ответа для любого отказа: и для ошибки валидации, и для отсутствующего ключа, и для исчерпанного лимита. Ветвиться в коде следует по полю `error` — это стабильный машинный код. Поля `title` и `message` предназначены человеку, их формулировки могут меняться."
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyBearer": {
+        "type": "http",
+        "description": "API-ключ передаётся в заголовке `Authorization: Bearer ak_…`.\n\nКлючи создаются в личном кабинете: https://atlorium.com/Account/Manage/ApiKeys\n\nЧтобы попробовать без регистрации и без списаний, вставьте демо-ключ\n`ak_sandbox_demo_mockdata_v1` — он возвращает моковые данные и помечает ответ\nзаголовком `X-Atlorium-Sandbox: true`.",
+        "scheme": "bearer",
+        "bearerFormat": "ak_…"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "API AML-скоринга",
+      "description": "Документация для API AML-скоринга (скрининг крипто-кошелька по адресу и сети: балл риска, санкции/PEP, источники и назначение средств, контрагенты; валидация ввода).",
+      "externalDocs": {
+        "description": "Попробовать в веб-интерфейсе",
+        "url": "https://atlorium.com/amlGUI"
+      }
+    }
+  ],
+  "externalDocs": {
+    "description": "Описание сервиса, примеры и границы применимости",
+    "url": "https://atlorium.com/amlDescription"
+  }
+}

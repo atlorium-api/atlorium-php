@@ -1,0 +1,970 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "API калькулятора подсетей",
+    "description": "Документация для API расчёта подсетей, проверки диапазонов IP и агрегации CIDR.\n\n### Авторизация\n\nВсе методы требуют API-ключ в заголовке запроса:\n\n```\nAuthorization: Bearer ak_ваш_ключ\n```\n\nКлючи создаются в личном кабинете, раздел [API-ключи](https://atlorium.com/Account/Manage/ApiKeys).\nГостевого доступа у API нет: запрос без ключа получает 401.\n\n### Песочница\n\nКлюч `ak_sandbox_demo_mockdata_v1` работает без регистрации и без списаний — возвращает\nправдоподобные демо-данные и помечает ответ заголовком `X-Atlorium-Sandbox: true`.\nУдобно проверить разбор ответа до подключения настоящего ключа.\n\n### Тарификация\n\nКредиты списываются **только за успешный ответ**. Отказы (400, 401, 402, 429, 5xx)\nне тарифицируются. Цены и бесплатные квоты — на странице [тарифов](https://atlorium.com/pricing),\nбаланс пополняется в [личном кабинете](https://atlorium.com/Account/Manage/Billing).\n\n### Ошибки\n\nЛюбой отказ возвращает **одну и ту же структуру** JSON — схема `ApiError` внизу страницы.\nРазбирать разные форматы под разные коды не нужно: машинный код причины всегда лежит\nв поле `error`.\n\n### Полезные ссылки\n\n* [Описание сервиса](https://atlorium.com/cidrDescription) — что умеет, откуда данные, где границы применимости\n* [Веб-интерфейс](https://atlorium.com/cidrGUI) — те же расчёты руками, без ключа\n* [Тарифы и лимиты](https://atlorium.com/pricing)\n* [Личный кабинет: API-ключи](https://atlorium.com/Account/Manage/ApiKeys)\n* [Личный кабинет: баланс и платежи](https://atlorium.com/Account/Manage/Billing)\n* [Блог](https://atlorium.com/blog) — разборы задач и примеры интеграции\n* [Сообщить о проблеме](https://atlorium.com/bug-report) · [support@atlorium.com](mailto:support@atlorium.com)\n* [Оферта](https://atlorium.com/terms-of-service) · [Политика обработки информации](https://atlorium.com/privacy-policy)",
+    "termsOfService": "https://atlorium.com/terms-of-service",
+    "contact": {
+      "name": "Atlorium",
+      "url": "https://atlorium.com/bug-report",
+      "email": "support@atlorium.com"
+    },
+    "license": {
+      "name": "Проприетарная — использование по оферте",
+      "url": "https://atlorium.com/terms-of-service"
+    },
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Текущий сервер (адрес берётся из строки браузера)"
+    }
+  ],
+  "paths": {
+    "/api/Cidr/calculate": {
+      "get": {
+        "tags": [
+          "API калькулятора подсетей"
+        ],
+        "summary": "Вычисляет все параметры CIDR-блока.",
+        "description": "Пример запроса: GET /api/cidr/calculate?ip=192.168.1.0&mask=24\n\nВозвращает:\n- Network Address (адрес сети)\n- Broadcast Address (широковещательный адрес)\n- Netmask (маска подсети)\n- Wildcard Mask (wildcard-маска)\n- First/Last Usable IP (первый/последний используемый IP)\n- Total/Usable Hosts (общее/используемое количество хостов)\n- Binary/Hex представления",
+        "parameters": [
+          {
+            "name": "ip",
+            "in": "query",
+            "description": "IP-адрес (IPv4 или IPv6), например: 192.168.1.0 или 2001:db8::1",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "mask",
+            "in": "query",
+            "description": "Маска подсети в CIDR-нотации (0-32 для IPv4, 0-128 для IPv6)",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ. Возвращает объект CidrCalculationResult со всеми параметрами сети.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CidrCalculationResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CidrCalculationResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CidrCalculationResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Некорректные параметры запроса:\n- IP-адрес не указан или имеет неверный формат\n- Маска вне допустимого диапазона",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API-ключ отсутствует, просрочен или недействителен.\nДобавьте заголовок запроса: Authorization: Bearer {api_key}",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Недостаточно кредитов на балансе для выполнения запроса.\nПополните баланс в личном кабинете: /Account/Manage/Billing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Превышен rate-limit: исчерпана дневная или минутная квота для данного сервиса.\nПовторите запрос позже.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "через 42 секунды"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Непредвиденная внутренняя ошибка при вычислении CIDR-параметров.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "server_error",
+                  "title": "Сервис временно недоступен",
+                  "message": "Запрос не может быть обработан прямо сейчас. Повторите попытку через несколько минут. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/Cidr/subnets": {
+      "get": {
+        "tags": [
+          "API калькулятора подсетей"
+        ],
+        "summary": "Разбивает CIDR-блок на подсети с указанной новой маской.",
+        "description": "Пример запроса: GET /api/cidr/subnets?cidr=192.168.0.0/16&newMask=24\n\nЕсли количество подсетей превышает 128, возвращаются только первые 128.\nФлаг IsTruncated указывает на усечение результата.",
+        "parameters": [
+          {
+            "name": "cidr",
+            "in": "query",
+            "description": "Исходный CIDR, например: 192.168.0.0/16",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "newMask",
+            "in": "query",
+            "description": "Новая маска для подсетей (должна быть больше текущей)",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ. Возвращает объект SubnetBreakdownResult со списком подсетей.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubnetBreakdownResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubnetBreakdownResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubnetBreakdownResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Некорректные параметры запроса:\n- CIDR не указан или имеет неверный формат\n- Новая маска меньше или равна текущей",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API-ключ отсутствует, просрочен или недействителен.\nДобавьте заголовок запроса: Authorization: Bearer {api_key}",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Недостаточно кредитов на балансе для выполнения запроса.\nПополните баланс в личном кабинете: /Account/Manage/Billing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Превышен rate-limit: исчерпана дневная или минутная квота для данного сервиса.\nПовторите запрос позже.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "через 42 секунды"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Непредвиденная внутренняя ошибка при разбиении сети на подсети.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "server_error",
+                  "title": "Сервис временно недоступен",
+                  "message": "Запрос не может быть обработан прямо сейчас. Повторите попытку через несколько минут. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/Cidr/check": {
+      "get": {
+        "tags": [
+          "API калькулятора подсетей"
+        ],
+        "summary": "Проверяет, находится ли указанный IP-адрес в пределах CIDR-диапазона.",
+        "description": "Пример запроса: GET /api/cidr/check?cidr=10.0.0.0/8&ip=10.5.5.5",
+        "parameters": [
+          {
+            "name": "cidr",
+            "in": "query",
+            "description": "CIDR-диапазон для проверки, например: 10.0.0.0/8",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ip",
+            "in": "query",
+            "description": "IP-адрес для проверки, например: 10.5.5.5",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ. Возвращает объект IpRangeCheckResult с результатом проверки.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/IpRangeCheckResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IpRangeCheckResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IpRangeCheckResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Некорректные параметры запроса:\n- CIDR не указан или имеет неверный формат\n- IP-адрес не указан или имеет неверный формат",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API-ключ отсутствует, просрочен или недействителен.\nДобавьте заголовок запроса: Authorization: Bearer {api_key}",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Недостаточно кредитов на балансе для выполнения запроса.\nПополните баланс в личном кабинете: /Account/Manage/Billing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Превышен rate-limit: исчерпана дневная или минутная квота для данного сервиса.\nПовторите запрос позже.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "через 42 секунды"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Непредвиденная внутренняя ошибка при проверке принадлежности IP к диапазону.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "server_error",
+                  "title": "Сервис временно недоступен",
+                  "message": "Запрос не может быть обработан прямо сейчас. Повторите попытку через несколько минут. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/Cidr/supernet": {
+      "post": {
+        "tags": [
+          "API калькулятора подсетей"
+        ],
+        "summary": "Вычисляет наименьший общий CIDR (Supernet), покрывающий все входные IP/CIDR.",
+        "description": "Пример запроса: POST /api/cidr/supernet\nBody: { \"inputs\": [\"192.168.1.0/24\", \"192.168.2.0/24\", \"192.168.3.0/24\"] }\n\nПоддерживаемые форматы входных данных:\n- CIDR: 192.168.0.0/24\n- Одиночный IP: 192.168.1.1\n\nСмешивание IPv4 и IPv6 не поддерживается.",
+        "requestBody": {
+          "description": "Список IP-адресов и/или CIDR для агрегации",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupernetRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupernetRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupernetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Успешный ответ. Возвращает объект SupernetResult с агрегированным CIDR.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupernetResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupernetResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupernetResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Некорректные параметры запроса:\n- Список IP/CIDR не указан или пуст\n- Смешивание IPv4 и IPv6\n- Неверный формат одного из входных значений",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API-ключ отсутствует, просрочен или недействителен.\nДобавьте заголовок запроса: Authorization: Bearer {api_key}",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Недостаточно кредитов на балансе для выполнения запроса.\nПополните баланс в личном кабинете: /Account/Manage/Billing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Превышен rate-limit: исчерпана дневная или минутная квота для данного сервиса.\nПовторите запрос позже.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "через 42 секунды"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Непредвиденная внутренняя ошибка при вычислении supernet.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "server_error",
+                  "title": "Сервис временно недоступен",
+                  "message": "Запрос не может быть обработан прямо сейчас. Повторите попытку через несколько минут. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "title": "Ошибка API",
+        "required": [
+          "error",
+          "title",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Машинный код причины отказа. Возможные значения:\n\n* `server_error` (500) — Сервис временно недоступен\n* `unauthorized` (401) — Требуется вход\n* `api_key_required` (401) — Нужен API-ключ\n* `account_not_activated` (402) — Аккаунт не активирован\n* `rate_limited_client` (429) — Слишком много запросов\n* `rate_limited_global` (429) — Высокая нагрузка на сервис\n* `provider_keys_exhausted` (429) — Сервис временно недоступен\n* `insufficient_credits` (402) — Недостаточно кредитов\n* `guest_quota_exhausted` (402) — Бесплатный лимит на сегодня исчерпан\n* `service_disabled` (503) — Проводятся плановые работы\n* `maintenance` (503) — Проводятся плановые работы\n* `guest_not_allowed` (402) — Нужна регистрация\n* `service_not_in_account_terms` (403) — Сервис не подключён\n* `bad_request` (400) — Некорректный запрос\n* `forbidden` (403) — Доступ запрещён\n* `not_found` (404) — Ничего не найдено\n* `method_not_allowed` (405) — Метод HTTP не поддерживается\n* `unsupported_media_type` (415) — Формат запроса не поддерживается\n* `not_implemented` (501) — Режим пока не реализован",
+            "example": "insufficient_credits"
+          },
+          "title": {
+            "type": "string",
+            "description": "Короткий заголовок для интерфейса.",
+            "example": "Недостаточно кредитов"
+          },
+          "message": {
+            "type": "string",
+            "description": "Подробное объяснение: что произошло и что с этим делать. Показывается пользователю целиком."
+          },
+          "balance": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Текущий баланс в кредитах. Заполняется при 402, чтобы не делать отдельный запрос за балансом; в остальных случаях null."
+          },
+          "retryAfterSeconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Через сколько секунд имеет смысл повторить запрос. Дублирует HTTP-заголовок Retry-After. null — если повтор не поможет (например, кончились кредиты)."
+          },
+          "retryAfterText": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Та же задержка готовой фразой — «через 2 мин 30 с». Чтобы клиентам не приходилось самим склонять минуты и секунды."
+          }
+        },
+        "description": "Единое тело ответа для любого отказа: и для ошибки валидации, и для отсутствующего ключа, и для исчерпанного лимита. Ветвиться в коде следует по полю `error` — это стабильный машинный код. Поля `title` и `message` предназначены человеку, их формулировки могут меняться."
+      },
+      "CidrCalculationResult": {
+        "type": "object",
+        "properties": {
+          "ipAddress": {
+            "type": "string",
+            "description": "Исходный IP-адрес, введённый пользователем."
+          },
+          "mask": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Маска подсети в CIDR-нотации (например, 24 для /24).",
+            "format": "int32"
+          },
+          "ipVersion": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Версия IP-протокола: 4 для IPv4, 6 для IPv6.",
+            "format": "int32"
+          },
+          "networkAddress": {
+            "type": "string",
+            "description": "Адрес сети (Network Address) — первый адрес в диапазоне."
+          },
+          "broadcastAddress": {
+            "type": "string",
+            "description": "Широковещательный адрес (Broadcast Address) — последний адрес в диапазоне.\nДля IPv6 технически не существует, но возвращаем последний адрес диапазона."
+          },
+          "netmask": {
+            "type": "string",
+            "description": "Маска подсети в полном формате (например, 255.255.255.0)."
+          },
+          "wildcardMask": {
+            "type": "string",
+            "description": "Wildcard-маска — инверсия маски подсети (используется в ACL Cisco)."
+          },
+          "firstUsableIp": {
+            "type": "string",
+            "description": "Первый используемый IP-адрес (Network + 1 для IPv4)."
+          },
+          "lastUsableIp": {
+            "type": "string",
+            "description": "Последний используемый IP-адрес (Broadcast - 1 для IPv4)."
+          },
+          "totalHosts": {
+            "type": "string",
+            "description": "Общее количество хостов в сети.\nДля больших IPv6 сетей возвращается строка, так как BigInteger."
+          },
+          "usableHosts": {
+            "type": "string",
+            "description": "Количество используемых хостов (без Network и Broadcast для IPv4)."
+          },
+          "cidrNotation": {
+            "type": "string",
+            "description": "CIDR-нотация сети (например, 192.168.1.0/24)."
+          },
+          "binaryRepresentation": {
+            "type": "string",
+            "description": "Двоичное представление IP-адреса."
+          },
+          "hexRepresentation": {
+            "type": "string",
+            "description": "Шестнадцатеричное представление IP-адреса."
+          },
+          "binaryMask": {
+            "type": "string",
+            "description": "Двоичное представление маски подсети."
+          },
+          "success": {
+            "type": "boolean",
+            "description": "Флаг успешности расчёта."
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Сообщение об ошибке, если расчёт не удался."
+          }
+        },
+        "description": "Результат расчёта CIDR — содержит все вычисленные параметры сети."
+      },
+      "IpRangeCheckResult": {
+        "type": "object",
+        "properties": {
+          "cidr": {
+            "type": "string",
+            "description": "Проверяемый CIDR-диапазон."
+          },
+          "ipAddress": {
+            "type": "string",
+            "description": "Проверяемый IP-адрес."
+          },
+          "isInRange": {
+            "type": "boolean",
+            "description": "Результат проверки: true — IP находится в диапазоне."
+          },
+          "details": {
+            "type": "string",
+            "description": "Детальное описание результата проверки."
+          },
+          "success": {
+            "type": "boolean",
+            "description": "Флаг успешности проверки (валидность входных данных)."
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Сообщение об ошибке, если проверка не удалась."
+          }
+        },
+        "description": "Результат проверки принадлежности IP-адреса к CIDR-диапазону."
+      },
+      "SubnetBreakdownResult": {
+        "type": "object",
+        "properties": {
+          "originalCidr": {
+            "type": "string",
+            "description": "Исходный CIDR, который разбивается на подсети."
+          },
+          "newMask": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Новая маска для подсетей.",
+            "format": "int32"
+          },
+          "totalSubnets": {
+            "type": "string",
+            "description": "Общее количество возможных подсетей."
+          },
+          "displayedCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество отображаемых подсетей (до 128).",
+            "format": "int32"
+          },
+          "isTruncated": {
+            "type": "boolean",
+            "description": "Флаг, указывающий что результат был ограничен."
+          },
+          "subnets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SubnetInfo"
+            },
+            "description": "Список подсетей."
+          },
+          "success": {
+            "type": "boolean",
+            "description": "Флаг успешности расчёта."
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Сообщение об ошибке, если расчёт не удался."
+          }
+        },
+        "description": "Результат разбиения сети на подсети."
+      },
+      "SubnetInfo": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Порядковый номер подсети (начиная с 1).",
+            "format": "int32"
+          },
+          "networkAddress": {
+            "type": "string",
+            "description": "Адрес сети."
+          },
+          "broadcastAddress": {
+            "type": "string",
+            "description": "Широковещательный адрес."
+          },
+          "firstUsableIp": {
+            "type": "string",
+            "description": "Первый используемый IP-адрес."
+          },
+          "lastUsableIp": {
+            "type": "string",
+            "description": "Последний используемый IP-адрес."
+          },
+          "hostCount": {
+            "type": "string",
+            "description": "Количество хостов в подсети."
+          },
+          "cidrNotation": {
+            "type": "string",
+            "description": "CIDR-нотация подсети."
+          }
+        },
+        "description": "Информация об отдельной подсети."
+      },
+      "SupernetRequest": {
+        "type": "object",
+        "properties": {
+          "inputs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Список входных IP-адресов и/или CIDR для агрегации.\nПоддерживаемые разделители: новая строка, запятая, точка с запятой, пробел."
+          }
+        },
+        "description": "Запрос на агрегацию CIDR/IP."
+      },
+      "SupernetResult": {
+        "type": "object",
+        "properties": {
+          "inputs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Список входных IP-адресов и CIDR."
+          },
+          "parsedCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество успешно разобранных входных значений.",
+            "format": "int32"
+          },
+          "supernetCidr": {
+            "type": "string",
+            "description": "Вычисленный агрегированный CIDR (Supernet)."
+          },
+          "networkAddress": {
+            "type": "string",
+            "description": "Адрес сети supernet."
+          },
+          "broadcastAddress": {
+            "type": "string",
+            "description": "Широковещательный адрес supernet."
+          },
+          "totalHosts": {
+            "type": "string",
+            "description": "Общее количество хостов в supernet."
+          },
+          "success": {
+            "type": "boolean",
+            "description": "Флаг успешности расчёта."
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Сообщение об ошибке, если расчёт не удался."
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Список предупреждений (например, если некоторые входные значения не распознаны)."
+          }
+        },
+        "description": "Результат агрегации (supernetting) — наименьший общий CIDR."
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyBearer": {
+        "type": "http",
+        "description": "API-ключ передаётся в заголовке `Authorization: Bearer ak_…`.\n\nКлючи создаются в личном кабинете: https://atlorium.com/Account/Manage/ApiKeys\n\nЧтобы попробовать без регистрации и без списаний, вставьте демо-ключ\n`ak_sandbox_demo_mockdata_v1` — он возвращает моковые данные и помечает ответ\nзаголовком `X-Atlorium-Sandbox: true`.",
+        "scheme": "bearer",
+        "bearerFormat": "ak_…"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "API калькулятора подсетей",
+      "description": "Документация для API расчёта подсетей, проверки диапазонов IP и агрегации CIDR.",
+      "externalDocs": {
+        "description": "Попробовать в веб-интерфейсе",
+        "url": "https://atlorium.com/cidrGUI"
+      }
+    }
+  ],
+  "externalDocs": {
+    "description": "Описание сервиса, примеры и границы применимости",
+    "url": "https://atlorium.com/cidrDescription"
+  }
+}

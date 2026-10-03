@@ -1,0 +1,499 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "API проверки ссылки",
+    "description": "Документация для API проверки ссылки (репутация URL: фишинг, вредонос, нежелательное ПО; одиночный и пакетный режимы до 100 адресов). Вердикт «чисто» означает, что отметки об угрозе нет НА МОМЕНТ ПРОВЕРКИ, а не что сайт безопасен: свежий фишинговый домен попадает в любую репутационную базу с задержкой в часы — поэтому в каждом ответе есть время проверки. Сервис не загружает проверяемую страницу и ничего не говорит о её содержимом. Ссылки, по которым вердикт получить не удалось, не тарифицируются.\n\n### Авторизация\n\nВсе методы требуют API-ключ в заголовке запроса:\n\n```\nAuthorization: Bearer ak_ваш_ключ\n```\n\nКлючи создаются в личном кабинете, раздел [API-ключи](https://atlorium.com/Account/Manage/ApiKeys).\nГостевого доступа у API нет: запрос без ключа получает 401.\n\n### Песочница\n\nКлюч `ak_sandbox_demo_mockdata_v1` работает без регистрации и без списаний — возвращает\nправдоподобные демо-данные и помечает ответ заголовком `X-Atlorium-Sandbox: true`.\nУдобно проверить разбор ответа до подключения настоящего ключа.\n\n### Тарификация\n\nКредиты списываются **только за успешный ответ**. Отказы (400, 401, 402, 429, 5xx)\nне тарифицируются. Цены и бесплатные квоты — на странице [тарифов](https://atlorium.com/pricing),\nбаланс пополняется в [личном кабинете](https://atlorium.com/Account/Manage/Billing).\n\n### Ошибки\n\nЛюбой отказ возвращает **одну и ту же структуру** JSON — схема `ApiError` внизу страницы.\nРазбирать разные форматы под разные коды не нужно: машинный код причины всегда лежит\nв поле `error`.\n\n### Полезные ссылки\n\n* [Описание сервиса](https://atlorium.com/urlDescription) — что умеет, откуда данные, где границы применимости\n* [Веб-интерфейс](https://atlorium.com/urlGUI) — те же расчёты руками, без ключа\n* [Тарифы и лимиты](https://atlorium.com/pricing)\n* [Личный кабинет: API-ключи](https://atlorium.com/Account/Manage/ApiKeys)\n* [Личный кабинет: баланс и платежи](https://atlorium.com/Account/Manage/Billing)\n* [Блог](https://atlorium.com/blog) — разборы задач и примеры интеграции\n* [Сообщить о проблеме](https://atlorium.com/bug-report) · [support@atlorium.com](mailto:support@atlorium.com)\n* [Оферта](https://atlorium.com/terms-of-service) · [Политика обработки информации](https://atlorium.com/privacy-policy)",
+    "termsOfService": "https://atlorium.com/terms-of-service",
+    "contact": {
+      "name": "Atlorium",
+      "url": "https://atlorium.com/bug-report",
+      "email": "support@atlorium.com"
+    },
+    "license": {
+      "name": "Проприетарная — использование по оферте",
+      "url": "https://atlorium.com/terms-of-service"
+    },
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Текущий сервер (адрес берётся из строки браузера)"
+    }
+  ],
+  "paths": {
+    "/api/urlcheck": {
+      "get": {
+        "tags": [
+          "API проверки ссылки"
+        ],
+        "summary": "Проверяет одну ссылку и возвращает вердикт репутационной проверки.",
+        "description": "Пример запроса:\nGET /api/urlcheck?url=https://example.com/page\n\nПример ответа «чисто»:\n{ \"url\": \"https://example.com/page\", \"verdict\": \"clean\", \"threatTypes\": [],\n  \"checkedAtUtc\": \"2026-09-01T10:15:00Z\" }\n\nПример ответа «угроза»:\n{ \"url\": \"http://danger.example/login\", \"verdict\": \"threat\",\n  \"threatTypes\": [\"social_engineering\"], \"checkedAtUtc\": \"2026-09-01T10:15:00Z\" }\n\nВ демо-режиме (публичный демо-ключ) ветку ответа задаёт домен: адрес на\nmalware.example.com вернёт вредонос, на phishing.example.com — фишинг, на\ndanger.example.com — сразу две категории, любой другой — «чисто».",
+        "parameters": [
+          {
+            "name": "url",
+            "in": "query",
+            "description": "Проверяемый адрес. Схему можно опустить: «example.com/page» будет приведено к\n«http://example.com/page». Принимаются только адреса со схемой http или https.\nВ ответе адрес возвращается в приведённом виде — именно в нём он и проверялся.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ. Возвращает вердикт по ссылке.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/UrlThreatResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UrlThreatResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UrlThreatResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ссылка не указана или не распознана (нужен адрес http/https).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API-ключ отсутствует, просрочен или недействителен.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Недостаточно кредитов на балансе для выполнения запроса.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Превышен rate-limit. Повторите запрос позже.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "через 42 секунды"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Сервис временно недоступен. Запрос не тарифицируется.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "maintenance",
+                  "title": "Проводятся плановые работы",
+                  "message": "Выполнение запросов временно приостановлено на время плановых работ. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/urlcheck/batch": {
+      "post": {
+        "tags": [
+          "API проверки ссылки"
+        ],
+        "summary": "Проверяет пакет ссылок за один вызов (до 100 адресов).",
+        "description": "Порядок результатов совпадает с порядком присланных ссылок — сопоставляйте по индексу.\n\nПример запроса:\nPOST /api/urlcheck/batch\n[ \"https://example.com\", \"http://phishing.example.com/login\" ]\n\nТАРИФИКАЦИЯ ПАКЕТА. Списывается по числу ссылок с НАСТОЯЩИМ вердиктом. Если по трём\nстрокам из ста вердикт получить не удалось, спишется девяносто семь единиц, а не сто.",
+        "requestBody": {
+          "description": "Список проверяемых адресов. Пустые строки и повторы отбрасываются до проверки:\nповтор не добавляет работы и оплачиваться не должен. Максимум — 100 адресов.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "text/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Успешный ответ. Возвращает вердикты по всем ссылкам пакета.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/UrlThreatBatchResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UrlThreatBatchResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UrlThreatBatchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Список пуст, содержит только негодные адреса или превышает 100 строк.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API-ключ отсутствует, просрочен или недействителен.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Недостаточно кредитов на балансе для выполнения запроса.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Превышен rate-limit. Повторите запрос позже.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "через 42 секунды"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Не удалось проверить ни одной ссылки. Запрос не тарифицируется.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "maintenance",
+                  "title": "Проводятся плановые работы",
+                  "message": "Выполнение запросов временно приостановлено на время плановых работ. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "title": "Ошибка API",
+        "required": [
+          "error",
+          "title",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Машинный код причины отказа. Возможные значения:\n\n* `server_error` (500) — Сервис временно недоступен\n* `unauthorized` (401) — Требуется вход\n* `api_key_required` (401) — Нужен API-ключ\n* `account_not_activated` (402) — Аккаунт не активирован\n* `rate_limited_client` (429) — Слишком много запросов\n* `rate_limited_global` (429) — Высокая нагрузка на сервис\n* `provider_keys_exhausted` (429) — Сервис временно недоступен\n* `insufficient_credits` (402) — Недостаточно кредитов\n* `guest_quota_exhausted` (402) — Бесплатный лимит на сегодня исчерпан\n* `service_disabled` (503) — Проводятся плановые работы\n* `maintenance` (503) — Проводятся плановые работы\n* `guest_not_allowed` (402) — Нужна регистрация\n* `service_not_in_account_terms` (403) — Сервис не подключён\n* `bad_request` (400) — Некорректный запрос\n* `forbidden` (403) — Доступ запрещён\n* `not_found` (404) — Ничего не найдено\n* `method_not_allowed` (405) — Метод HTTP не поддерживается\n* `unsupported_media_type` (415) — Формат запроса не поддерживается\n* `not_implemented` (501) — Режим пока не реализован",
+            "example": "insufficient_credits"
+          },
+          "title": {
+            "type": "string",
+            "description": "Короткий заголовок для интерфейса.",
+            "example": "Недостаточно кредитов"
+          },
+          "message": {
+            "type": "string",
+            "description": "Подробное объяснение: что произошло и что с этим делать. Показывается пользователю целиком."
+          },
+          "balance": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Текущий баланс в кредитах. Заполняется при 402, чтобы не делать отдельный запрос за балансом; в остальных случаях null."
+          },
+          "retryAfterSeconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Через сколько секунд имеет смысл повторить запрос. Дублирует HTTP-заголовок Retry-After. null — если повтор не поможет (например, кончились кредиты)."
+          },
+          "retryAfterText": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Та же задержка готовой фразой — «через 2 мин 30 с». Чтобы клиентам не приходилось самим склонять минуты и секунды."
+          }
+        },
+        "description": "Единое тело ответа для любого отказа: и для ошибки валидации, и для отсутствующего ключа, и для исчерпанного лимита. Ветвиться в коде следует по полю `error` — это стабильный машинный код. Поля `title` и `message` предназначены человеку, их формулировки могут меняться."
+      },
+      "UrlThreatBatchResponse": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UrlThreatResult"
+            },
+            "description": "Результаты по каждой ссылке — в том же порядке, в каком ссылки пришли в запросе."
+          },
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Сколько ссылок было в пакете (после удаления пустых строк и дубликатов).",
+            "format": "int32"
+          },
+          "threatCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Сколько ссылок отмечено как опасные.",
+            "format": "int32"
+          },
+          "unknownCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Сколько ссылок проверить не удалось (вердикт unknown).\nРовно на это число уменьшается списание относительно размера пакета.",
+            "format": "int32"
+          },
+          "elapsedMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Общее время обработки пакета в миллисекундах.",
+            "format": "int64"
+          }
+        },
+        "description": "Ответ ПАКЕТНОГО режима: по одному UrlThreatResult на каждую присланную ссылку,\nв том же порядке, плюс короткая сводка."
+      },
+      "UrlThreatResult": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Проверенная ссылка в НОРМАЛИЗОВАННОМ виде — так, как она реально уходила на проверку.\nОтличается от присланной клиентом, если тот опустил схему («example.com» → «http://example.com»)\nили оставил лишние пробелы. Возвращаем именно нормализованный вид, чтобы клиент видел,\nчто проверялось на самом деле, и не гадал, почему вердикт относится к другому адресу."
+          },
+          "verdict": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UrlThreatVerdict"
+              }
+            ],
+            "description": "Итог проверки: чисто, угроза или «не удалось проверить»."
+          },
+          "threatTypes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UrlThreatType"
+            },
+            "description": "Категории угрозы. Пустой список при clean и\nunknown; при threat —\nодна или несколько категорий (сайт может быть одновременно и фишинговым, и раздающим\nвредонос)."
+          },
+          "checkedAtUtc": {
+            "type": "string",
+            "description": "Момент, к которому относится вердикт (UTC). Именно он превращает «чисто» из обещания в\nдатированное утверждение — см. оговорку в шапке файла. Обязателен к показу рядом с\nвердиктом в любом интерфейсе, который строится поверх этого API.",
+            "format": "date-time"
+          },
+          "message": {
+            "type": "string",
+            "description": "Короткое пояснение для человека: почему такой вердикт и что с ним делать. Заполняется\nвсегда, в том числе для «чисто», — интерфейс, показывающий пустоту при благополучном\nисходе, выглядит сломанным."
+          },
+          "elapsedMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Сколько миллисекунд заняла проверка. Служебное поле для диагностики интеграции.",
+            "format": "int64"
+          }
+        },
+        "description": "Результат проверки ОДНОЙ ссылки."
+      },
+      "UrlThreatType": {
+        "enum": [
+          "malware",
+          "social_engineering",
+          "unwanted_software"
+        ],
+        "description": "Категория угрозы, найденной по ссылке. Значений немного и они не пересекаются: одна и та же\nссылка может попасть сразу в несколько категорий, поэтому в ответе лежит СПИСОК, а не одно\nзначение.\n\nЗначения:\n* `Malware` — Вредоносное ПО: страница пытается установить на устройство посетителя программу, действующую против его интересов, — троян, шифровальщик, майнер.\n* `SocialEngineering` — Социальная инженерия — то, что в быту называют фишингом: страница притворяется чужой (банком, госпорталом, маркетплейсом, страницей входа) и выманивает пароли, коды подтверждения или реквизиты карты. Самая частая категория в русскоязычном сегменте.\n* `UnwantedSoftware` — Нежелательное ПО: формально не вирус, но ведёт себя нечестно — подменяет поиск, ставит расширения без спроса, показывает рекламу поверх чужих сайтов, не удаляется штатными средствами."
+      },
+      "UrlThreatVerdict": {
+        "enum": [
+          "clean",
+          "threat",
+          "unknown"
+        ],
+        "description": "Итог проверки одной ссылки в трёх состояниях. Заводить булево «опасно/не опасно» здесь было\nбы ошибкой: третье состояние — «проверить не удалось» — принципиально другое, и путать его\nс «чисто» нельзя ни в интерфейсе, ни в биллинге.\n\nЗначения:\n* `Clean` — Отметок об угрозе в базе на момент проверки нет. Читается вместе с checkedAtUtc: это датированное утверждение, а не гарантия безопасности сайта.\n* `Threat` — Ссылка отмечена как опасная. Конкретные категории — в threatTypes.\n* `Unknown` — Вердикт получить не удалось — проверка не выполнена. Это НЕ «чисто» и НЕ «опасно» — данных нет вовсе. Такие строки пакета не тарифицируются (см. UrlThreatBatchResponse)."
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyBearer": {
+        "type": "http",
+        "description": "API-ключ передаётся в заголовке `Authorization: Bearer ak_…`.\n\nКлючи создаются в личном кабинете: https://atlorium.com/Account/Manage/ApiKeys\n\nЧтобы попробовать без регистрации и без списаний, вставьте демо-ключ\n`ak_sandbox_demo_mockdata_v1` — он возвращает моковые данные и помечает ответ\nзаголовком `X-Atlorium-Sandbox: true`.",
+        "scheme": "bearer",
+        "bearerFormat": "ak_…"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "API проверки ссылки",
+      "description": "Документация для API проверки ссылки (репутация URL: фишинг, вредонос, нежелательное ПО; одиночный и пакетный режимы до 100 адресов). Вердикт «чисто» означает, что отметки об угрозе нет НА МОМЕНТ ПРОВЕРКИ, а не что сайт безопасен: свежий фишинговый домен попадает в любую репутационную базу с задержкой в часы — поэтому в каждом ответе есть время проверки. Сервис не загружает проверяемую страницу и ничего не говорит о её содержимом. Ссылки, по которым вердикт получить не удалось, не тарифицируются.",
+      "externalDocs": {
+        "description": "Попробовать в веб-интерфейсе",
+        "url": "https://atlorium.com/urlGUI"
+      }
+    }
+  ],
+  "externalDocs": {
+    "description": "Описание сервиса, примеры и границы применимости",
+    "url": "https://atlorium.com/urlDescription"
+  }
+}

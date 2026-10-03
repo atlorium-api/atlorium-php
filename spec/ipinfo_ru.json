@@ -1,0 +1,878 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "API профиля IP",
+    "description": "Документация для API профиля IP (геолокация адреса, а в расширенном режиме — владелец сети, признаки анонимизации, контакт для жалоб и репутация).\n\n### Авторизация\n\nВсе методы требуют API-ключ в заголовке запроса:\n\n```\nAuthorization: Bearer ak_ваш_ключ\n```\n\nКлючи создаются в личном кабинете, раздел [API-ключи](https://atlorium.com/Account/Manage/ApiKeys).\nГостевого доступа у API нет: запрос без ключа получает 401.\n\n### Песочница\n\nКлюч `ak_sandbox_demo_mockdata_v1` работает без регистрации и без списаний — возвращает\nправдоподобные демо-данные и помечает ответ заголовком `X-Atlorium-Sandbox: true`.\nУдобно проверить разбор ответа до подключения настоящего ключа.\n\n### Тарификация\n\nКредиты списываются **только за успешный ответ**. Отказы (400, 401, 402, 429, 5xx)\nне тарифицируются. Цены и бесплатные квоты — на странице [тарифов](https://atlorium.com/pricing),\nбаланс пополняется в [личном кабинете](https://atlorium.com/Account/Manage/Billing).\n\n### Ошибки\n\nЛюбой отказ возвращает **одну и ту же структуру** JSON — схема `ApiError` внизу страницы.\nРазбирать разные форматы под разные коды не нужно: машинный код причины всегда лежит\nв поле `error`.\n\n### Полезные ссылки\n\n* [Описание сервиса](https://atlorium.com/ipinfoDescription) — что умеет, откуда данные, где границы применимости\n* [Веб-интерфейс](https://atlorium.com/ipinfoGUI) — те же расчёты руками, без ключа\n* [Тарифы и лимиты](https://atlorium.com/pricing)\n* [Личный кабинет: API-ключи](https://atlorium.com/Account/Manage/ApiKeys)\n* [Личный кабинет: баланс и платежи](https://atlorium.com/Account/Manage/Billing)\n* [Блог](https://atlorium.com/blog) — разборы задач и примеры интеграции\n* [Сообщить о проблеме](https://atlorium.com/bug-report) · [support@atlorium.com](mailto:support@atlorium.com)\n* [Оферта](https://atlorium.com/terms-of-service) · [Политика обработки информации](https://atlorium.com/privacy-policy)",
+    "termsOfService": "https://atlorium.com/terms-of-service",
+    "contact": {
+      "name": "Atlorium",
+      "url": "https://atlorium.com/bug-report",
+      "email": "support@atlorium.com"
+    },
+    "license": {
+      "name": "Проприетарная — использование по оферте",
+      "url": "https://atlorium.com/terms-of-service"
+    },
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Текущий сервер (адрес берётся из строки браузера)"
+    }
+  ],
+  "paths": {
+    "/api/IpInfo/{ip}": {
+      "get": {
+        "tags": [
+          "API профиля IP"
+        ],
+        "summary": "Возвращает профиль IP-адреса: геолокацию, а при extended=true — ещё и сведения о владельце\nи репутации адреса.",
+        "description": "Примеры запросов:\nGET /api/ipinfo/8.8.8.8\nGET /api/ipinfo/206.189.233.36?extended=true",
+        "parameters": [
+          {
+            "name": "ip",
+            "in": "path",
+            "description": "IP-адрес (IPv4 или IPv6). Примеры: 8.8.8.8, 2606:4700:4700::1111. Приватные и\nзарезервированные адреса публичного профиля не имеют.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "extended",
+            "in": "query",
+            "description": "Расширенные сведения: владелец сети (ASN/организация), hostname, признаки анонимизации\n(VPN/прокси/Tor/relay/резидентный прокси), контакт для жалоб и отметка о жалобах. По\nумолчанию false. Расширенный режим тарифицируется по собственной цене — см. страницу тарифов.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ. Возвращает профиль адреса.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/IpReport"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IpReport"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IpReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Адрес не указан, некорректен или относится к приватному/зарезервированному диапазону.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API-ключ отсутствует, просрочен или недействителен.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Недостаточно кредитов на балансе для выполнения запроса.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Превышен rate-limit. Повторите запрос позже.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "через 42 секунды"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Сервис расширенных сведений временно недоступен.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "maintenance",
+                  "title": "Проводятся плановые работы",
+                  "message": "Выполнение запросов временно приостановлено на время плановых работ. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AbuseInfo": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Имя ответственного лица или название подразделения, принимающего жалобы."
+          },
+          "email": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Адрес электронной почты для жалоб — основной канал: именно сюда пишут о спаме,\nпереборе паролей и сканировании с этого адреса."
+          },
+          "phone": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Телефон для связи, если владелец сети его опубликовал."
+          },
+          "address": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Почтовый адрес владельца сети из регистрационных данных."
+          },
+          "country": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Страна владельца сети. Может не совпадать со страной самого адреса."
+          },
+          "network": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Диапазон сети, к которому относится контакт."
+          }
+        },
+        "description": "Контакт для жалоб на злоупотребления с адреса (abuse-контакт владельца сети)."
+      },
+      "AbuseReportsInfo": {
+        "type": "object",
+        "properties": {
+          "flagged": {
+            "type": "boolean",
+            "description": "true — на адрес есть публичные жалобы (флаг «замечен в злоупотреблениях»)."
+          },
+          "detailsUrl": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Ссылка на публичную страницу с деталями жалоб (если есть)."
+          }
+        },
+        "description": "Отметка о жалобах на адрес по публичным базам репутации."
+      },
+      "ApiError": {
+        "title": "Ошибка API",
+        "required": [
+          "error",
+          "title",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Машинный код причины отказа. Возможные значения:\n\n* `server_error` (500) — Сервис временно недоступен\n* `unauthorized` (401) — Требуется вход\n* `api_key_required` (401) — Нужен API-ключ\n* `account_not_activated` (402) — Аккаунт не активирован\n* `rate_limited_client` (429) — Слишком много запросов\n* `rate_limited_global` (429) — Высокая нагрузка на сервис\n* `provider_keys_exhausted` (429) — Сервис временно недоступен\n* `insufficient_credits` (402) — Недостаточно кредитов\n* `guest_quota_exhausted` (402) — Бесплатный лимит на сегодня исчерпан\n* `service_disabled` (503) — Проводятся плановые работы\n* `maintenance` (503) — Проводятся плановые работы\n* `guest_not_allowed` (402) — Нужна регистрация\n* `service_not_in_account_terms` (403) — Сервис не подключён\n* `bad_request` (400) — Некорректный запрос\n* `forbidden` (403) — Доступ запрещён\n* `not_found` (404) — Ничего не найдено\n* `method_not_allowed` (405) — Метод HTTP не поддерживается\n* `unsupported_media_type` (415) — Формат запроса не поддерживается\n* `not_implemented` (501) — Режим пока не реализован",
+            "example": "insufficient_credits"
+          },
+          "title": {
+            "type": "string",
+            "description": "Короткий заголовок для интерфейса.",
+            "example": "Недостаточно кредитов"
+          },
+          "message": {
+            "type": "string",
+            "description": "Подробное объяснение: что произошло и что с этим делать. Показывается пользователю целиком."
+          },
+          "balance": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Текущий баланс в кредитах. Заполняется при 402, чтобы не делать отдельный запрос за балансом; в остальных случаях null."
+          },
+          "retryAfterSeconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Через сколько секунд имеет смысл повторить запрос. Дублирует HTTP-заголовок Retry-After. null — если повтор не поможет (например, кончились кредиты)."
+          },
+          "retryAfterText": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Та же задержка готовой фразой — «через 2 мин 30 с». Чтобы клиентам не приходилось самим склонять минуты и секунды."
+          }
+        },
+        "description": "Единое тело ответа для любого отказа: и для ошибки валидации, и для отсутствующего ключа, и для исчерпанного лимита. Ветвиться в коде следует по полю `error` — это стабильный машинный код. Поля `title` и `message` предназначены человеку, их формулировки могут меняться."
+      },
+      "AsnInfo": {
+        "type": "object",
+        "properties": {
+          "asn": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Номер AS в формате «AS12345»."
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Название оператора AS."
+          },
+          "domain": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Домен оператора."
+          },
+          "route": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Анонсируемый префикс (маршрут), которому принадлежит адрес."
+          },
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Тип AS: isp / hosting / business / education и т.п."
+          },
+          "rpkiValid": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "Статус RPKI маршрута (валиден ли ROA), если известно."
+          },
+          "lastChanged": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Когда сведения об ASN последний раз менялись (если известно)."
+          }
+        },
+        "description": "Сведения об автономной системе (ASN)."
+      },
+      "CarrierInfo": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Название оператора."
+          },
+          "mcc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "MCC — код страны мобильной сети."
+          },
+          "mnc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "MNC — код мобильной сети внутри страны."
+          }
+        },
+        "description": "Данные мобильного оператора (заполнены только для мобильных сетей)."
+      },
+      "CompanyInfo": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Название организации, за которой закреплён диапазон. Может отличаться от оператора\nавтономной системы: провайдер выдаёт часть своей сети клиенту, и владельцем числится клиент."
+          },
+          "domain": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Сайт организации — по нему быстрее всего понять, кто это на самом деле."
+          },
+          "route": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Диапазон адресов организации в нотации CIDR, например 93.184.216.0/24."
+          },
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Тип организации: hosting / isp / business и т.п."
+          }
+        },
+        "description": "Организация-владелец диапазона."
+      },
+      "GeoInfo": {
+        "type": "object",
+        "properties": {
+          "city": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Населённый пункт: «Москва», «Екатеринбург»."
+          },
+          "region": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Регион первого уровня: область, край, штат."
+          },
+          "regionCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Код региона, например MOW или SVE."
+          },
+          "country": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Название страны."
+          },
+          "countryCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Код страны по стандарту ISO 3166-1 alpha-2: RU, DE, US."
+          },
+          "continent": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Название части света."
+          },
+          "continentCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Код части света: EU, AS, NA."
+          },
+          "latitude": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Широта центра предполагаемой зоны. Это НЕ адрес пользователя: точность задаётся\nрадиусом accuracyRadiusKm и обычно измеряется десятками километров.",
+            "format": "double"
+          },
+          "longitude": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Долгота центра предполагаемой зоны. Оговорка про точность — та же, что у широты.",
+            "format": "double"
+          },
+          "postal": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Почтовый индекс зоны, если он известен."
+          },
+          "timezone": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Часовой пояс в нотации IANA: Europe/Moscow, Asia/Yekaterinburg."
+          },
+          "dmaCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Код DMA (рекламный рынок США). Заполняется в основном для адресов в США."
+          },
+          "geonameId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Идентификатор населённого пункта в GeoNames."
+          },
+          "accuracyRadiusKm": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Радиус точности геолокации в километрах (чем меньше — тем точнее).",
+            "format": "int32"
+          },
+          "lastChanged": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Когда сведения о географии адреса последний раз менялись (если известно)."
+          }
+        },
+        "description": "Географические сведения об адресе. Все поля опциональны — заполняется, что известно."
+      },
+      "HostedDomainsInfo": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Сколько доменов размещено на адресе. Возвращается только количество, без перечня доменов.",
+            "format": "int32"
+          }
+        },
+        "description": "Сведения о доменах, размещённых на адресе."
+      },
+      "IpReport": {
+        "required": [
+          "ip",
+          "tier"
+        ],
+        "type": "object",
+        "properties": {
+          "ip": {
+            "type": "string",
+            "description": "Запрошенный IP-адрес в нормализованном виде."
+          },
+          "tier": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/IpReportTier"
+              }
+            ],
+            "description": "Какой объём сведений внутри (см. IpReportTier)."
+          },
+          "isBogon": {
+            "type": "boolean",
+            "description": "true — адрес из «служебного» диапазона (bogon): частный/зарезервированный/loopback и т.п."
+          },
+          "hostname": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Обратное DNS-имя (PTR) хоста, если известно. Иначе null."
+          },
+          "geo": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GeoInfo"
+              }
+            ],
+            "description": "Основная география адреса — наиболее достоверный из доступных вариантов. Может быть null."
+          },
+          "geoSources": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/SourcedGeo"
+            },
+            "description": "Расходящиеся варианты географии, когда данные по адресу не совпадают между собой.\nЗаполняется только при расхождении: если все имеющиеся сведения сходятся, показывать\nнечего и поле пустое. Варианты помечены нейтрально — «Источник 1», «Источник 2»."
+          },
+          "asn": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AsnInfo"
+              }
+            ],
+            "description": "Сведения об автономной системе (ASN) — «кто держит» сеть. Может быть null."
+          },
+          "asnSources": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/SourcedAsn"
+            },
+            "description": "Расходящиеся варианты сведений об автономной системе. Заполняется только при расхождении, иначе null."
+          },
+          "company": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CompanyInfo"
+              }
+            ],
+            "description": "Организация-владелец диапазона (может отличаться от ASN-оператора). Может быть null."
+          },
+          "flags": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/NetworkFlags"
+              }
+            ],
+            "description": "Признаки сети (хостинг/мобильный/anycast/спутник и т.п.). Может быть null."
+          },
+          "carrier": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CarrierInfo"
+              }
+            ],
+            "description": "Данные мобильного оператора — только для мобильных сетей. Иначе null."
+          },
+          "privacy": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PrivacyInfo"
+              }
+            ],
+            "description": "Признаки анонимизации (VPN/proxy/Tor/relay/резидентный прокси). Только расширенный режим."
+          },
+          "abuse": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AbuseInfo"
+              }
+            ],
+            "description": "Контакт для жалоб (abuse). Только расширенный режим. Может быть null."
+          },
+          "hostedDomains": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/HostedDomainsInfo"
+              }
+            ],
+            "description": "Сведения о доменах, размещённых на адресе (сейчас — только счётчик). Может быть null."
+          },
+          "abuseReports": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AbuseReportsInfo"
+              }
+            ],
+            "description": "Отметка о жалобах на адрес (публичные базы репутации). Только расширенный режим."
+          }
+        },
+        "description": "Профиль IP-адреса. Любая секция может быть пустой: набор доступных сведений зависит от\nсамого адреса (например, carrier заполняется только у мобильных сетей) и от режима запроса\n(privacy и abuse возвращаются только в расширенном). Незаполненные секции следует\nпропускать, а не считать ошибкой."
+      },
+      "IpReportTier": {
+        "enum": [
+          "Basic",
+          "Extended"
+        ],
+        "description": "Объём сведений в ответе: базовый профиль или расширенный.\n\nЗначения:\n* `Basic` — Базовый профиль: география, автономная система, организация-владелец, hostname.\n* `Extended` — Базовый профиль и дополнительно признаки анонимизации, контакт для жалоб, отметка о жалобах."
+      },
+      "NetworkFlags": {
+        "type": "object",
+        "properties": {
+          "isAnonymous": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "Адрес отмечен как анонимный (обобщённый признак)."
+          },
+          "isAnycast": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "Anycast-адрес (один и тот же адрес анонсируется из многих точек)."
+          },
+          "isHosting": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "Адрес принадлежит хостингу/дата-центру."
+          },
+          "isMobile": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "Адрес принадлежит мобильной сети."
+          },
+          "isSatellite": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "Спутниковый провайдер."
+          }
+        },
+        "description": "Признаки сети верхнего уровня."
+      },
+      "PrivacyInfo": {
+        "type": "object",
+        "properties": {
+          "isVpn": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "Адрес принадлежит VPN-сервису. Само по себе это не признак злого умысла: VPN\n            массово используют и для работы, и для приватности."
+          },
+          "isProxy": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "Адрес принадлежит прокси-серверу — трафик идёт через посредника."
+          },
+          "isTor": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "Адрес — выходной узел сети Tor. Реальный источник трафика в этом случае неизвестен."
+          },
+          "isRelay": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "Адрес относится к сервису приватной ретрансляции (например, iCloud Private Relay).\nФормально это не VPN, но исходный адрес пользователя всё равно скрыт."
+          },
+          "isHosting": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "Адрес относится к хостингу (частый признак «не живого» пользователя)."
+          },
+          "isResidentialProxy": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "Резидентный прокси (трафик прячется за адресами обычных домашних пользователей)."
+          },
+          "serviceName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Название конкретного сервиса анонимизации, если определено (например, публичный VPN/прокси-сервис)."
+          },
+          "lastSeen": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Когда адрес в последний раз наблюдался как анонимизирующий (свежесть сигнала)."
+          },
+          "percentDaysSeen": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Доля дней за последнюю неделю, когда адрес был активен как прокси (0..100).",
+            "format": "int32"
+          }
+        },
+        "description": "Признаки анонимизации — что известно о том, прячется ли реальный источник трафика за\nVPN, прокси или Tor, и насколько свежий это сигнал. Возвращается в расширенном режиме."
+      },
+      "SourcedAsn": {
+        "required": [
+          "sourceLabel",
+          "asn"
+        ],
+        "type": "object",
+        "properties": {
+          "sourceLabel": {
+            "type": "string",
+            "description": "Нейтральная метка варианта: «Источник 1», «Источник 2»."
+          },
+          "asn": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AsnInfo"
+              }
+            ],
+            "description": "Сведения об автономной системе в этом варианте."
+          }
+        },
+        "description": "Один из расходящихся вариантов сведений об автономной системе."
+      },
+      "SourcedGeo": {
+        "required": [
+          "sourceLabel",
+          "geo"
+        ],
+        "type": "object",
+        "properties": {
+          "sourceLabel": {
+            "type": "string",
+            "description": "Нейтральная метка варианта: «Источник 1», «Источник 2»."
+          },
+          "geo": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GeoInfo"
+              }
+            ],
+            "description": "География адреса в этом варианте."
+          }
+        },
+        "description": "Один из расходящихся вариантов географии адреса."
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyBearer": {
+        "type": "http",
+        "description": "API-ключ передаётся в заголовке `Authorization: Bearer ak_…`.\n\nКлючи создаются в личном кабинете: https://atlorium.com/Account/Manage/ApiKeys\n\nЧтобы попробовать без регистрации и без списаний, вставьте демо-ключ\n`ak_sandbox_demo_mockdata_v1` — он возвращает моковые данные и помечает ответ\nзаголовком `X-Atlorium-Sandbox: true`.",
+        "scheme": "bearer",
+        "bearerFormat": "ak_…"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "API профиля IP",
+      "description": "Документация для API профиля IP (геолокация адреса, а в расширенном режиме — владелец сети, признаки анонимизации, контакт для жалоб и репутация).",
+      "externalDocs": {
+        "description": "Попробовать в веб-интерфейсе",
+        "url": "https://atlorium.com/ipinfoGUI"
+      }
+    }
+  ],
+  "externalDocs": {
+    "description": "Описание сервиса, примеры и границы применимости",
+    "url": "https://atlorium.com/ipinfoDescription"
+  }
+}

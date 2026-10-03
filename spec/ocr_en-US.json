@@ -1,0 +1,307 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "Image OCR API",
+    "description": "API documentation for image OCR (image-to-text recognition).\n\n### Authorization\n\nEvery method requires an API key in the request header:\n\n```\nAuthorization: Bearer ak_your_key\n```\n\nKeys are created in your account, section [API keys](https://atlorium.com/Account/Manage/ApiKeys).\nThe API has no guest access: a request without a key returns 401.\n\n### Sandbox\n\nThe key `ak_sandbox_demo_mockdata_v1` works without registration and is never charged — it\nreturns realistic demo data and marks the response with the `X-Atlorium-Sandbox: true` header.\nUse it to validate your response parsing before plugging in a real key.\n\n### Billing\n\nCredits are charged **only for a successful response**. Rejections (400, 401, 402, 429, 5xx)\nare never charged. Prices and free quotas are on the [pricing page](https://atlorium.com/pricing);\nthe balance is topped up in your [account](https://atlorium.com/Account/Manage/Billing).\n\n### Errors\n\nEvery rejection returns **the same JSON structure** — see the `ApiError` schema at the bottom\nof this page. There is no need to parse a different shape per status code: the machine-readable\nreason always lives in the `error` field.\n\n### Useful links\n\n* [Service overview](https://atlorium.com/ocrDescription) — what it does, where the data comes from, what it does not cover\n* [Web interface](https://atlorium.com/ocrGUI) — the same lookups by hand, no key required\n* [Pricing and limits](https://atlorium.com/pricing)\n* [Account: API keys](https://atlorium.com/Account/Manage/ApiKeys)\n* [Account: balance and payments](https://atlorium.com/Account/Manage/Billing)\n* [Blog](https://atlorium.com/blog)\n* [Report a problem](https://atlorium.com/bug-report) · [support@atlorium.com](mailto:support@atlorium.com)\n* [Terms of Service](https://atlorium.com/terms-of-service) · [Privacy policy](https://atlorium.com/privacy-policy)",
+    "termsOfService": "https://atlorium.com/terms-of-service",
+    "contact": {
+      "name": "Atlorium",
+      "url": "https://atlorium.com/bug-report",
+      "email": "support@atlorium.com"
+    },
+    "license": {
+      "name": "Proprietary — see Terms of Service",
+      "url": "https://atlorium.com/terms-of-service"
+    },
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Current server"
+    }
+  ],
+  "paths": {
+    "/api/Ocr/image-to-text": {
+      "post": {
+        "tags": [
+          "Image OCR API"
+        ],
+        "summary": "Recognizes text on an image. The image is passed as Base64 (data-URL is also accepted).",
+        "description": "Example request:\nPOST /api/ocr/image-to-text\n{ \"image\": \"iVBORw0KGgoAAAANSUhEUgAA...\" }",
+        "requestBody": {
+          "description": "The image (Base64) and recognition parameters.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImageOcrRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImageOcrRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImageOcrRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The image has been processed (recognized=true with content, or recognized=false).",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageOcrResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageOcrResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageOcrResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The image is missing, corrupted or larger than 10 MB.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The API key is missing, expired or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Not enough credits on the balance to run the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded. Retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "in 42 seconds"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The service is temporarily unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "maintenance",
+                  "title": "Проводятся плановые работы",
+                  "message": "Выполнение запросов временно приостановлено на время плановых работ. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "title": "API error",
+        "required": [
+          "error",
+          "title",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Machine-readable reason code. Possible values:\n\n* `server_error` (500) — Сервис временно недоступен\n* `unauthorized` (401) — Требуется вход\n* `api_key_required` (401) — Нужен API-ключ\n* `account_not_activated` (402) — Аккаунт не активирован\n* `rate_limited_client` (429) — Слишком много запросов\n* `rate_limited_global` (429) — Высокая нагрузка на сервис\n* `provider_keys_exhausted` (429) — Сервис временно недоступен\n* `insufficient_credits` (402) — Недостаточно кредитов\n* `guest_quota_exhausted` (402) — Бесплатный лимит на сегодня исчерпан\n* `service_disabled` (503) — Проводятся плановые работы\n* `maintenance` (503) — Проводятся плановые работы\n* `guest_not_allowed` (402) — Нужна регистрация\n* `service_not_in_account_terms` (403) — Сервис не подключён\n* `bad_request` (400) — Некорректный запрос\n* `forbidden` (403) — Доступ запрещён\n* `not_found` (404) — Ничего не найдено\n* `method_not_allowed` (405) — Метод HTTP не поддерживается\n* `unsupported_media_type` (415) — Формат запроса не поддерживается\n* `not_implemented` (501) — Режим пока не реализован",
+            "example": "insufficient_credits"
+          },
+          "title": {
+            "type": "string",
+            "description": "Short title for a user interface.",
+            "example": "Insufficient credits"
+          },
+          "message": {
+            "type": "string",
+            "description": "Detailed explanation: what happened and what to do about it. Shown to the user as is."
+          },
+          "balance": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Current balance in credits. Filled in on 402 so that no extra balance request is needed; null otherwise."
+          },
+          "retryAfterSeconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "How many seconds to wait before retrying. Mirrors the Retry-After HTTP header. null when retrying will not help (for example, out of credits)."
+          },
+          "retryAfterText": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The same delay as a ready-to-show phrase. Saves clients from formatting it themselves."
+          }
+        },
+        "description": "A single response body for every rejection: validation errors, a missing key, an exhausted limit. Branch on the `error` field — it is a stable machine-readable code. `title` and `message` are meant for humans and their wording may change."
+      },
+      "ImageOcrRequest": {
+        "type": "object",
+        "properties": {
+          "image": {
+            "type": "string",
+            "description": "Изображение в кодировке Base64 (можно как «голый» base64, так и data-URL вида\n\"data:image/png;base64,....\"). Обязательное поле. Предел — 10 МБ в декодированном виде:\nскан листа A4 в 300 dpi укладывается с запасом. PDF на вход не принимается —\nмногостраничный файл нужно отрендерить в изображения и отправлять постранично."
+          },
+          "mode": {
+            "type": "string",
+            "description": "Режим распознавания — одно из значений OcrModes. По умолчанию\nauto: сервис сам решает по размеру и содержимому изображения.\n\nУказывать режим явно стоит в двух случаях: когда автоопределение промахивается на\nнетипичной картинке и когда важна предсказуемая стоимость — короткая строка всегда\nстоит одну единицу работы, а разбор страницы столько, сколько на ней областей."
+          }
+        },
+        "description": "Запрос на распознавание: клиент присылает изображение и режим, получает его содержимое.\nСценарий синхронный — ответ приходит в том же HTTP-вызове."
+      },
+      "ImageOcrResponse": {
+        "type": "object",
+        "properties": {
+          "recognized": {
+            "type": "boolean",
+            "description": "true, если изображение распознано и в text лежит его содержимое."
+          },
+          "text": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Содержимое изображения (при recognized = true); иначе null. Как его\nразбирать — сообщает format."
+          },
+          "format": {
+            "type": "string",
+            "description": "Формат поля text — одно из значений OcrTextFormats. Значение\nпозволяет выбрать разбор, не угадывая его по содержимому: список допустимых значений\nможет пополниться, поэтому неизвестное значение разумно обрабатывать как\nplain."
+          },
+          "mode": {
+            "type": "string",
+            "description": "Режим, в котором изображение РЕАЛЬНО распознано. Совпадает с запрошенным, кроме случая\nauto, где здесь виден выбор сервиса.\n\nПоле диагностическое и важное: если результат оказался не тем, что ожидалось, первым\nделом надо смотреть сюда — почти всегда причина в том, что автоопределение приняло\nстраницу за строку или наоборот, и лечится это явным указанием режима."
+          },
+          "units": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Единицы работы, в которые обошёлся запрос, — по ним он и тарифицирован. Короткая строка\nэто всегда 1; страница документа — столько, сколько на ней распознано областей\n(заголовки, блоки текста, таблицы). Плотный документ дороже простого ровно во столько\nраз, во сколько больше в нём областей.\n\nЗначение возвращается ВСЕГДА, включая нераспознанные изображения (там оно равно нулю) —\nчтобы расход по пакету можно было сверить, не заглядывая в личный кабинет.",
+            "format": "int32"
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "true, если ответ ОБОРВАН и содержимое распознано НЕ ПОЛНОСТЬЮ: упёрлись в предел длины\nответа или в потолок числа областей на странице.\n\nПроверять это поле важно: обрезанный текст выглядит совершенно нормальным, и без явного\nпризнака потеря части документа проходит незамеченной. Практическая реакция — отправить\nстраницу на ручную проверку, а не использовать результат как полный."
+          },
+          "elapsedMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Время обработки запроса в миллисекундах — включая ожидание в очереди, а не только само\nраспознавание. Именно поэтому по нему удобно подбирать степень параллелизма пакетной\nобработки: значение растёт при неизменных изображениях — конвейер упёрся в пропускную\nспособность сервиса, и увеличивать число потоков дальше бессмысленно.",
+            "format": "int64"
+          }
+        },
+        "description": "Результат распознавания. recognized = true и text с содержимым —\nуспех; recognized = false означает, что читаемого текста на изображении найти\nне удалось. За нераспознанное изображение плата не взимается."
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyBearer": {
+        "type": "http",
+        "description": "The API key goes into the `Authorization: Bearer ak_…` header.\n\nKeys are created in your account: https://atlorium.com/Account/Manage/ApiKeys\n\nTo try it without registration and without being charged, use the demo key\n`ak_sandbox_demo_mockdata_v1` — it returns mock data and marks the response with\nthe `X-Atlorium-Sandbox: true` header.",
+        "scheme": "bearer",
+        "bearerFormat": "ak_…"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Image OCR API",
+      "description": "API documentation for image OCR (image-to-text recognition).",
+      "externalDocs": {
+        "description": "Try it in the web interface",
+        "url": "https://atlorium.com/ocrGUI"
+      }
+    }
+  ],
+  "externalDocs": {
+    "description": "Service overview, examples and limitations",
+    "url": "https://atlorium.com/ocrDescription"
+  }
+}

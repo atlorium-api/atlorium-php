@@ -1,0 +1,796 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "API аудита сайта",
+    "description": "Документация для API аудита сайта (скорость загрузки и Core Web Vitals: баллы по четырём категориям, лабораторные метрики прогона, полевые данные реальных посетителей за 28 суток и рекомендации по убыванию оценочного выигрыша; одиночный и пакетный режимы до 20 адресов). ВНИМАНИЕ: страница по-настоящему открывается в браузере, поэтому ответ занимает 10–30 секунд — ставьте таймаут HTTP-клиента не меньше 120 секунд. Полевых данных по конкретной странице может не быть (малопосещаемый адрес не набирает выборки) — это не ошибка, данные по сайту целиком при этом обычно есть. Страницы, которые не удалось загрузить, не тарифицируются.\n\n### Авторизация\n\nВсе методы требуют API-ключ в заголовке запроса:\n\n```\nAuthorization: Bearer ak_ваш_ключ\n```\n\nКлючи создаются в личном кабинете, раздел [API-ключи](https://atlorium.com/Account/Manage/ApiKeys).\nГостевого доступа у API нет: запрос без ключа получает 401.\n\n### Песочница\n\nКлюч `ak_sandbox_demo_mockdata_v1` работает без регистрации и без списаний — возвращает\nправдоподобные демо-данные и помечает ответ заголовком `X-Atlorium-Sandbox: true`.\nУдобно проверить разбор ответа до подключения настоящего ключа.\n\n### Тарификация\n\nКредиты списываются **только за успешный ответ**. Отказы (400, 401, 402, 429, 5xx)\nне тарифицируются. Цены и бесплатные квоты — на странице [тарифов](https://atlorium.com/pricing),\nбаланс пополняется в [личном кабинете](https://atlorium.com/Account/Manage/Billing).\n\n### Ошибки\n\nЛюбой отказ возвращает **одну и ту же структуру** JSON — схема `ApiError` внизу страницы.\nРазбирать разные форматы под разные коды не нужно: машинный код причины всегда лежит\nв поле `error`.\n\n### Полезные ссылки\n\n* [Описание сервиса](https://atlorium.com/speedDescription) — что умеет, откуда данные, где границы применимости\n* [Веб-интерфейс](https://atlorium.com/speedGUI) — те же расчёты руками, без ключа\n* [Тарифы и лимиты](https://atlorium.com/pricing)\n* [Личный кабинет: API-ключи](https://atlorium.com/Account/Manage/ApiKeys)\n* [Личный кабинет: баланс и платежи](https://atlorium.com/Account/Manage/Billing)\n* [Блог](https://atlorium.com/blog) — разборы задач и примеры интеграции\n* [Сообщить о проблеме](https://atlorium.com/bug-report) · [support@atlorium.com](mailto:support@atlorium.com)\n* [Оферта](https://atlorium.com/terms-of-service) · [Политика обработки информации](https://atlorium.com/privacy-policy)",
+    "termsOfService": "https://atlorium.com/terms-of-service",
+    "contact": {
+      "name": "Atlorium",
+      "url": "https://atlorium.com/bug-report",
+      "email": "support@atlorium.com"
+    },
+    "license": {
+      "name": "Проприетарная — использование по оферте",
+      "url": "https://atlorium.com/terms-of-service"
+    },
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Текущий сервер (адрес берётся из строки браузера)"
+    }
+  ],
+  "paths": {
+    "/api/pagespeed": {
+      "get": {
+        "tags": [
+          "API аудита сайта"
+        ],
+        "summary": "Выполняет аудит одной страницы и возвращает полный отчёт.",
+        "description": "Примеры запросов:\nGET /api/pagespeed?url=https://example.com\nGET /api/pagespeed?url=https://example.com&strategy=desktop\nGET /api/pagespeed?url=https://example.com&forceRefresh=true\n\n⚠ Ответ занимает 10–30 секунд: страница действительно загружается в браузере.\n\nКАК ЧИТАТЬ ОТЧЁТ. Начните с поля message — это одна фраза с выводом. Затем сверьте\nfinalUrl с запрошенным адресом: если они различаются, вас увела переадресация и\nизмерялась другая страница (частый случай — редирект на страницу согласия с cookie).\nДальше — performanceScore как быстрый ориентир и opportunities сверху вниз: первые\nдва-три пункта и есть то, чем стоит заняться.\n\nЧТО ЗНАЧИТ «ЭКОНОМИЯ» В РЕКОМЕНДАЦИЯХ. Это оценка, а не обещание: столько\nмиллисекунд отыграется, если пункт выполнить полностью. Пункты пересекаются между\nсобой, поэтому складывать экономию по всему списку и ждать такой суммы не следует.",
+        "parameters": [
+          {
+            "name": "url",
+            "in": "query",
+            "description": "Адрес страницы. Схему можно опустить: «example.com» будет приведено к\n«https://example.com/». Принимаются только адреса со схемой http или https.\nСтраница должна открываться публично — без авторизации и без блокировки\nавтоматических обращений.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "strategy",
+            "in": "query",
+            "description": "Профиль устройства: mobile (по умолчанию) или desktop. Влияет на результат сильно —\nсравнивать между собой можно только замеры на одном профиле.",
+            "schema": {
+              "default": "mobile",
+              "$ref": "#/components/schemas/SiteStrategy"
+            }
+          },
+          {
+            "name": "forceRefresh",
+            "in": "query",
+            "description": "true — выполнить прогон заново, минуя сохранённый результат. Нужен ровно в одном\nсценарии, зато в самом частом: «я только что выкатил оптимизацию — стало быстрее?».\nСохранённый отчёт в этот момент показал бы состояние ДО правки. Тарифицируется как\nобычный запрос: работа выполняется полностью.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ. Возвращает отчёт аудита.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SitePerformanceReport"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SitePerformanceReport"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SitePerformanceReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Адрес не указан или не распознан (нужен адрес http/https).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API-ключ отсутствует, просрочен или недействителен.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Недостаточно кредитов на балансе для выполнения запроса.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Превышен rate-limit. Повторите запрос позже.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "через 42 секунды"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Аудит не состоялся: страницу не удалось загрузить либо сервис временно недоступен.\nЗапрос не тарифицируется.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "maintenance",
+                  "title": "Проводятся плановые работы",
+                  "message": "Выполнение запросов временно приостановлено на время плановых работ. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/pagespeed/batch": {
+      "post": {
+        "tags": [
+          "API аудита сайта"
+        ],
+        "summary": "Выполняет аудит пакета адресов за один вызов (до 20 адресов).",
+        "description": "Порядок результатов совпадает с порядком присланных адресов — сопоставляйте по индексу.\n\n⚠ ПАКЕТ ИДЁТ МИНУТАМИ. Двадцать адресов — примерно две минуты: адреса обрабатываются\nпо четыре одновременно, каждый прогон 10–30 секунд. Поставьте таймаут своего клиента\nс запасом или разбейте работу на пакеты поменьше — в деньгах вы ничего не потеряете,\nединица стоит столько же.\n\nПример запроса:\nPOST /api/pagespeed/batch?strategy=mobile\n[ \"https://example.com\", \"https://example.com/catalog\" ]\n\nТАРИФИКАЦИЯ ПАКЕТА. Списывается по числу адресов, по которым аудит РЕАЛЬНО состоялся.\nЕсли из двадцати страниц три не открылись, спишется семнадцать единиц, а не двадцать.\nПринудительного обновления в обход сохранённых отчётов у пакетного режима нет: пакет —\nэто регулярный обход списка страниц, и в нём ценно как раз то, что уже посчитанное\nберётся готовым.",
+        "parameters": [
+          {
+            "name": "strategy",
+            "in": "query",
+            "description": "Профиль устройства, единый для всего пакета.",
+            "schema": {
+              "default": "mobile",
+              "$ref": "#/components/schemas/SiteStrategy"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Список адресов страниц. Пустые строки и повторы отбрасываются до аудита: повтор не\nдобавляет работы и оплачиваться не должен. Максимум — 20 адресов.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "text/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Успешный ответ. Возвращает результаты по всем адресам пакета.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SitePerformanceBatchResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SitePerformanceBatchResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SitePerformanceBatchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Список пуст, содержит только негодные адреса или превышает 20 строк.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API-ключ отсутствует, просрочен или недействителен.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Недостаточно кредитов на балансе для выполнения запроса.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Превышен rate-limit. Повторите запрос позже.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "через 42 секунды"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Не удалось выполнить ни одного аудита. Запрос не тарифицируется.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "maintenance",
+                  "title": "Проводятся плановые работы",
+                  "message": "Выполнение запросов временно приостановлено на время плановых работ. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "title": "Ошибка API",
+        "required": [
+          "error",
+          "title",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Машинный код причины отказа. Возможные значения:\n\n* `server_error` (500) — Сервис временно недоступен\n* `unauthorized` (401) — Требуется вход\n* `api_key_required` (401) — Нужен API-ключ\n* `account_not_activated` (402) — Аккаунт не активирован\n* `rate_limited_client` (429) — Слишком много запросов\n* `rate_limited_global` (429) — Высокая нагрузка на сервис\n* `provider_keys_exhausted` (429) — Сервис временно недоступен\n* `insufficient_credits` (402) — Недостаточно кредитов\n* `guest_quota_exhausted` (402) — Бесплатный лимит на сегодня исчерпан\n* `service_disabled` (503) — Проводятся плановые работы\n* `maintenance` (503) — Проводятся плановые работы\n* `guest_not_allowed` (402) — Нужна регистрация\n* `service_not_in_account_terms` (403) — Сервис не подключён\n* `bad_request` (400) — Некорректный запрос\n* `forbidden` (403) — Доступ запрещён\n* `not_found` (404) — Ничего не найдено\n* `method_not_allowed` (405) — Метод HTTP не поддерживается\n* `unsupported_media_type` (415) — Формат запроса не поддерживается\n* `not_implemented` (501) — Режим пока не реализован",
+            "example": "insufficient_credits"
+          },
+          "title": {
+            "type": "string",
+            "description": "Короткий заголовок для интерфейса.",
+            "example": "Недостаточно кредитов"
+          },
+          "message": {
+            "type": "string",
+            "description": "Подробное объяснение: что произошло и что с этим делать. Показывается пользователю целиком."
+          },
+          "balance": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Текущий баланс в кредитах. Заполняется при 402, чтобы не делать отдельный запрос за балансом; в остальных случаях null."
+          },
+          "retryAfterSeconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Через сколько секунд имеет смысл повторить запрос. Дублирует HTTP-заголовок Retry-After. null — если повтор не поможет (например, кончились кредиты)."
+          },
+          "retryAfterText": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Та же задержка готовой фразой — «через 2 мин 30 с». Чтобы клиентам не приходилось самим склонять минуты и секунды."
+          }
+        },
+        "description": "Единое тело ответа для любого отказа: и для ошибки валидации, и для отсутствующего ключа, и для исчерпанного лимита. Ветвиться в коде следует по полю `error` — это стабильный машинный код. Поля `title` и `message` предназначены человеку, их формулировки могут меняться."
+      },
+      "MetricRating": {
+        "enum": [
+          "good",
+          "needs_improvement",
+          "poor",
+          "unknown"
+        ],
+        "description": "Качественная оценка одной метрики по общепринятым порогам: «хорошо», «нужно улучшить»,\n«плохо». Пороги заданы отраслевой спецификацией метрик, а не этим сервисом, — поэтому\nграницы и цвета совпадут с любым другим инструментом измерения.\n\nЗначения:\n* `Good` — Значение в пределах хорошего порога.\n* `NeedsImprovement` — Значение между хорошим и плохим порогом: работает, но заметно посетителю.\n* `Poor` — Значение хуже плохого порога.\n* `Unknown` — Оценки нет: метрика не измерена либо порогов для неё не определено."
+      },
+      "SiteFieldData": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "description": "Что именно описывают эти данные: конкретную страницу («page») или сайт целиком\n(«origin»). Различие принципиально: у редко посещаемой страницы своих данных обычно нет,\nа по сайту целиком они есть почти всегда — и подменять одно другим молча нельзя."
+          },
+          "overallRating": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MetricRating"
+              }
+            ],
+            "description": "Сводная оценка объекта наблюдения по совокупности метрик."
+          },
+          "metrics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SiteFieldMetric"
+            },
+            "description": "Метрики полевых данных."
+          }
+        },
+        "description": "Полевые данные одного объекта наблюдения — либо конкретной страницы, либо сайта целиком."
+      },
+      "SiteFieldMetric": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Устойчивый машинный ключ метрики («largest_contentful_paint»)."
+          },
+          "title": {
+            "type": "string",
+            "description": "Человеко-читаемое название метрики."
+          },
+          "percentile": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Значение 75-го перцентиля. Для метрик времени — миллисекунды; для сдвига макета —\nбезразмерная величина в сотых долях (в\ndisplayValue она уже приведена к привычному виду).",
+            "format": "double"
+          },
+          "displayValue": {
+            "type": "string",
+            "description": "Готовое к показу значение с единицей измерения."
+          },
+          "rating": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MetricRating"
+              }
+            ],
+            "description": "Качественная оценка по общепринятым порогам."
+          },
+          "goodPercent": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Доля посещений с «хорошим» значением метрики, проценты 0–100.",
+            "format": "double"
+          },
+          "needsImprovementPercent": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Доля посещений со значением «нужно улучшить», проценты 0–100.",
+            "format": "double"
+          },
+          "poorPercent": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Доля посещений с «плохим» значением метрики, проценты 0–100.",
+            "format": "double"
+          }
+        },
+        "description": "Одна метрика ПОЛЕВЫХ данных — то, что видят реальные посетители."
+      },
+      "SiteLabMetric": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Устойчивый машинный ключ метрики («largest-contentful-paint», «total-blocking-time»).\nИменно по нему стоит писать разбор ответа: заголовок локализуется и меняется, ключ — нет."
+          },
+          "title": {
+            "type": "string",
+            "description": "Человеко-читаемое название метрики."
+          },
+          "displayValue": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Готовое к показу значение с единицей измерения («2,4 s», «0,05»)."
+          },
+          "numericValue": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Числовое значение метрики — для собственных графиков и порогов. Единица измерения — в\nunit; для метрик времени это миллисекунды, для сдвига макета — безразмерная\nвеличина.",
+            "format": "double"
+          },
+          "unit": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Единица измерения числового значения: «ms», «unitless», «byte»."
+          },
+          "rating": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MetricRating"
+              }
+            ],
+            "description": "Качественная оценка метрики по общепринятым порогам."
+          }
+        },
+        "description": "Одна лабораторная метрика прогона."
+      },
+      "SiteOpportunity": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Устойчивый машинный ключ рекомендации («render-blocking-resources»)."
+          },
+          "title": {
+            "type": "string",
+            "description": "Название рекомендации."
+          },
+          "savingsMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Оценка выигрыша в миллисекундах, если пункт выполнить.",
+            "format": "double"
+          },
+          "displayValue": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Готовое к показу значение выигрыша («Est savings of 1,20 s»)."
+          }
+        },
+        "description": "Одна рекомендация: что конкретно замедляет страницу и сколько времени даст исправление."
+      },
+      "SitePerformanceBatchItem": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Адрес из запроса (в нормализованном виде)."
+          },
+          "succeeded": {
+            "type": "boolean",
+            "description": "Удалось ли выполнить аудит по этому адресу."
+          },
+          "report": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SitePerformanceReport"
+              }
+            ],
+            "description": "Отчёт. Заполнен, когда succeeded = true."
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Причина, по которой отчёта нет: страница не открылась, адрес не распознан,\nзамер не выполнен. Заполнена, когда succeeded = false."
+          }
+        },
+        "description": "Одна строка пакетного ответа: либо отчёт, либо причина, по которой отчёта нет."
+      },
+      "SitePerformanceBatchResponse": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SitePerformanceBatchItem"
+            },
+            "description": "Результаты по каждому адресу — в том же порядке, в каком адреса пришли в запросе.\nПорядок гарантирован: пакет обычно приходит из чужого цикла по своему списку, и\nсопоставление по индексу — самый дешёвый способ разобрать ответ."
+          },
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Сколько адресов было в пакете (после удаления пустых строк и дубликатов).",
+            "format": "int32"
+          },
+          "succeededCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Сколько адресов удалось проверить. Ровно за столько единиц идёт списание.",
+            "format": "int32"
+          },
+          "failedCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Сколько адресов проверить не удалось. Эти адреса не тарифицируются.",
+            "format": "int32"
+          },
+          "elapsedMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Общее время обработки пакета в миллисекундах.",
+            "format": "int64"
+          }
+        },
+        "description": "Ответ ПАКЕТНОГО режима: по одному элементу на каждый присланный адрес, в том же порядке."
+      },
+      "SitePerformanceReport": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Адрес, по которому запрашивался аудит (в нормализованном виде)."
+          },
+          "finalUrl": {
+            "type": "string",
+            "description": "Адрес, на котором прогон в итоге оказался. Отличается от url при\nпереадресации — и это первое, на что стоит смотреть, когда числа выглядят странно:\nвозможно, измерялась совсем не та страница (например, редирект увёл на мобильную версию\nили на страницу согласия с cookie)."
+          },
+          "strategy": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SiteStrategy"
+              }
+            ],
+            "description": "Профиль устройства, на котором выполнен прогон."
+          },
+          "fetchedAtUtc": {
+            "type": "string",
+            "description": "Момент выполнения прогона (UTC).",
+            "format": "date-time"
+          },
+          "performanceScore": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Балл производительности, 0–100. Это ЛАБОРАТОРНЫЙ показатель, сводящий несколько метрик\nпрогона в одно число. null, если категория не запрашивалась.",
+            "format": "int32"
+          },
+          "accessibilityScore": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Балл доступности, 0–100. null, если категория не запрашивалась.",
+            "format": "int32"
+          },
+          "bestPracticesScore": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Балл соблюдения рекомендуемых практик, 0–100. null, если категория не запрашивалась.",
+            "format": "int32"
+          },
+          "seoScore": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Балл поисковой оптимизации, 0–100. null, если категория не запрашивалась.",
+            "format": "int32"
+          },
+          "labMetrics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SiteLabMetric"
+            },
+            "description": "Лабораторные метрики прогона."
+          },
+          "fieldData": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SiteFieldData"
+              }
+            ],
+            "description": "Полевые данные по ЭТОЙ странице. null — данных нет, и это штатный случай для\nмалопосещаемых адресов, а не ошибка. В таком случае смотрите\noriginFieldData."
+          },
+          "originFieldData": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SiteFieldData"
+              }
+            ],
+            "description": "Полевые данные по САЙТУ ЦЕЛИКОМ. Есть почти всегда, когда у сайта вообще есть заметный\nтрафик, — в том числе когда по конкретной странице данных не набралось."
+          },
+          "opportunities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SiteOpportunity"
+            },
+            "description": "Рекомендации, отсортированные по убыванию оценочного выигрыша."
+          },
+          "elapsedMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Сколько миллисекунд занял аудит на нашей стороне. Служебное поле для диагностики.",
+            "format": "int64"
+          },
+          "message": {
+            "type": "string",
+            "description": "Пояснение для человека: краткий вывод по отчёту. Заполняется всегда — интерфейс,\nпоказывающий голые цифры без вывода, заставляет клиента интерпретировать их самому."
+          }
+        },
+        "description": "Полный отчёт по одному адресу: оценки по категориям, лабораторные метрики, полевые данные\n(если они есть) и список рекомендаций."
+      },
+      "SiteStrategy": {
+        "enum": [
+          "mobile",
+          "desktop"
+        ],
+        "description": "Профиль устройства, на котором выполняется прогон. Выбор влияет на результат СИЛЬНО:\nмобильный профиль намеренно моделирует небыстрый телефон на медленной сети, и балл на нём\nпочти всегда заметно ниже настольного. Сравнивать между собой можно только замеры на\nОДНОМ профиле.\n\nЗначения:\n* `Mobile` — Мобильный профиль — значение по умолчанию. По умолчанию именно он, потому что это профиль, по которому поисковые системы оценивают страницу, и потому что в России доля мобильного трафика выше настольного у подавляющего большинства сайтов.\n* `Desktop` — Настольный профиль: быстрое устройство и быстрая сеть."
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyBearer": {
+        "type": "http",
+        "description": "API-ключ передаётся в заголовке `Authorization: Bearer ak_…`.\n\nКлючи создаются в личном кабинете: https://atlorium.com/Account/Manage/ApiKeys\n\nЧтобы попробовать без регистрации и без списаний, вставьте демо-ключ\n`ak_sandbox_demo_mockdata_v1` — он возвращает моковые данные и помечает ответ\nзаголовком `X-Atlorium-Sandbox: true`.",
+        "scheme": "bearer",
+        "bearerFormat": "ak_…"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "API аудита сайта",
+      "description": "Документация для API аудита сайта (скорость загрузки и Core Web Vitals: баллы по четырём категориям, лабораторные метрики прогона, полевые данные реальных посетителей за 28 суток и рекомендации по убыванию оценочного выигрыша; одиночный и пакетный режимы до 20 адресов). ВНИМАНИЕ: страница по-настоящему открывается в браузере, поэтому ответ занимает 10–30 секунд — ставьте таймаут HTTP-клиента не меньше 120 секунд. Полевых данных по конкретной странице может не быть (малопосещаемый адрес не набирает выборки) — это не ошибка, данные по сайту целиком при этом обычно есть. Страницы, которые не удалось загрузить, не тарифицируются.",
+      "externalDocs": {
+        "description": "Попробовать в веб-интерфейсе",
+        "url": "https://atlorium.com/speedGUI"
+      }
+    }
+  ],
+  "externalDocs": {
+    "description": "Описание сервиса, примеры и границы применимости",
+    "url": "https://atlorium.com/speedDescription"
+  }
+}

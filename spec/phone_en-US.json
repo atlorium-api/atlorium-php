@@ -1,0 +1,364 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "Phone Validation API",
+    "description": "API documentation for phone validation (fast number parsing: validity, E.164/international/national formats, country, number type, range carrier, region, time zones). The number's live network status is not checked.\n\n### Authorization\n\nEvery method requires an API key in the request header:\n\n```\nAuthorization: Bearer ak_your_key\n```\n\nKeys are created in your account, section [API keys](https://atlorium.com/Account/Manage/ApiKeys).\nThe API has no guest access: a request without a key returns 401.\n\n### Sandbox\n\nThe key `ak_sandbox_demo_mockdata_v1` works without registration and is never charged — it\nreturns realistic demo data and marks the response with the `X-Atlorium-Sandbox: true` header.\nUse it to validate your response parsing before plugging in a real key.\n\n### Billing\n\nCredits are charged **only for a successful response**. Rejections (400, 401, 402, 429, 5xx)\nare never charged. Prices and free quotas are on the [pricing page](https://atlorium.com/pricing);\nthe balance is topped up in your [account](https://atlorium.com/Account/Manage/Billing).\n\n### Errors\n\nEvery rejection returns **the same JSON structure** — see the `ApiError` schema at the bottom\nof this page. There is no need to parse a different shape per status code: the machine-readable\nreason always lives in the `error` field.\n\n### Useful links\n\n* [Service overview](https://atlorium.com/phoneDescription) — what it does, where the data comes from, what it does not cover\n* [Web interface](https://atlorium.com/phoneGUI) — the same lookups by hand, no key required\n* [Pricing and limits](https://atlorium.com/pricing)\n* [Account: API keys](https://atlorium.com/Account/Manage/ApiKeys)\n* [Account: balance and payments](https://atlorium.com/Account/Manage/Billing)\n* [Blog](https://atlorium.com/blog)\n* [Report a problem](https://atlorium.com/bug-report) · [support@atlorium.com](mailto:support@atlorium.com)\n* [Terms of Service](https://atlorium.com/terms-of-service) · [Privacy policy](https://atlorium.com/privacy-policy)",
+    "termsOfService": "https://atlorium.com/terms-of-service",
+    "contact": {
+      "name": "Atlorium",
+      "url": "https://atlorium.com/bug-report",
+      "email": "support@atlorium.com"
+    },
+    "license": {
+      "name": "Proprietary — see Terms of Service",
+      "url": "https://atlorium.com/terms-of-service"
+    },
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Current server"
+    }
+  ],
+  "paths": {
+    "/api/Phone/{number}": {
+      "get": {
+        "tags": [
+          "Phone Validation API"
+        ],
+        "summary": "Returns a phone number card: validity, formats, country, number type, range carrier,\nregion and time zones.",
+        "description": "Example requests:\nGET /api/phone/%2B79161234567\nGET /api/phone/89161234567?countryCode=RU\n\nWHAT isValid MEANS. The number is written correctly and falls into a range actually\nallocated in its country. It does NOT mean that the number is assigned to anyone\nor that it is reachable.\n\nWHAT originalCarrier MEANS. The carrier the number range was ALLOCATED to. A subscriber\nmay port the number to another carrier while keeping it (MNP), and a numbering reference\ndoes not know about that. For an arbitrary number this field is an informed guess, not a fact.",
+        "parameters": [
+          {
+            "name": "number",
+            "in": "path",
+            "description": "Phone number. Accepted in international format (\"+79161234567\") or in national format\n(\"8 916 123-45-67\") — in the latter case countryCode is required.\nSpaces, brackets and hyphens are allowed. The \"+\" sign is percent-encoded as %2B in a URL.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "countryCode",
+            "in": "query",
+            "description": "Country code (ISO-3166 alpha-2, for example \"RU\") used to interpret a number written in\nnational format. Not needed and ignored for numbers starting with \"+\".",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success. Returns the phone number card.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhoneReport"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhoneReport"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhoneReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The number is missing or is not a phone number.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The API key is missing, expired or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Not enough credits on the balance to run the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded. Retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "in 42 seconds"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "title": "API error",
+        "required": [
+          "error",
+          "title",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Machine-readable reason code. Possible values:\n\n* `server_error` (500) — Сервис временно недоступен\n* `unauthorized` (401) — Требуется вход\n* `api_key_required` (401) — Нужен API-ключ\n* `account_not_activated` (402) — Аккаунт не активирован\n* `rate_limited_client` (429) — Слишком много запросов\n* `rate_limited_global` (429) — Высокая нагрузка на сервис\n* `provider_keys_exhausted` (429) — Сервис временно недоступен\n* `insufficient_credits` (402) — Недостаточно кредитов\n* `guest_quota_exhausted` (402) — Бесплатный лимит на сегодня исчерпан\n* `service_disabled` (503) — Проводятся плановые работы\n* `maintenance` (503) — Проводятся плановые работы\n* `guest_not_allowed` (402) — Нужна регистрация\n* `service_not_in_account_terms` (403) — Сервис не подключён\n* `bad_request` (400) — Некорректный запрос\n* `forbidden` (403) — Доступ запрещён\n* `not_found` (404) — Ничего не найдено\n* `method_not_allowed` (405) — Метод HTTP не поддерживается\n* `unsupported_media_type` (415) — Формат запроса не поддерживается\n* `not_implemented` (501) — Режим пока не реализован",
+            "example": "insufficient_credits"
+          },
+          "title": {
+            "type": "string",
+            "description": "Short title for a user interface.",
+            "example": "Insufficient credits"
+          },
+          "message": {
+            "type": "string",
+            "description": "Detailed explanation: what happened and what to do about it. Shown to the user as is."
+          },
+          "balance": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Current balance in credits. Filled in on 402 so that no extra balance request is needed; null otherwise."
+          },
+          "retryAfterSeconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "How many seconds to wait before retrying. Mirrors the Retry-After HTTP header. null when retrying will not help (for example, out of credits)."
+          },
+          "retryAfterText": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The same delay as a ready-to-show phrase. Saves clients from formatting it themselves."
+          }
+        },
+        "description": "A single response body for every rejection: validation errors, a missing key, an exhausted limit. Branch on the `error` field — it is a stable machine-readable code. `title` and `message` are meant for humans and their wording may change."
+      },
+      "PhoneNumberInfo": {
+        "type": "object",
+        "properties": {
+          "isValid": {
+            "type": "boolean",
+            "description": "true, если номер валиден: он не просто похож на телефон по длине, но и попадает в реально\nвыделенный диапазон своей страны. Именно это поле стоит использовать как «номер годен»."
+          },
+          "isPossible": {
+            "type": "boolean",
+            "description": "true, если номер лишь ПОХОЖ на телефонный (подходящая длина для своей страны), но при этом\nможет не попадать ни в один выделенный диапазон. Более мягкая проверка, чем isValid:\nполезна, когда справочник нумерации страны отстаёт от реальности и настоящий номер помечен\nневалидным. Если false — это точно не телефон."
+          },
+          "e164": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Номер в международном формате E.164 — канонический вид без пробелов и скобок\n(например, \"+79161234567\"). Именно эту форму следует хранить в своей базе.\nПусто, если номер не удалось разобрать."
+          },
+          "international": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Номер в международном формате для показа человеку, с разделителями\n(например, \"+7 916 123-45-67\"). Пусто, если номер не удалось разобрать."
+          },
+          "national": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Номер в национальном формате записи, принятом в его стране\n(например, \"8 (916) 123-45-67\"). Пусто, если номер не удалось разобрать."
+          },
+          "rfc3966": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Номер в формате RFC 3966 — как ссылка для набора (например, \"tel:+7-916-123-45-67\").\nУдобно подставлять в атрибут href. Пусто, если номер не удалось разобрать."
+          },
+          "countryCallingCode": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Телефонный код страны без плюса (например, 7 для России, 1 для США). 0 — если не определён.",
+            "format": "int32"
+          },
+          "countryCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Код страны номера в формате ISO-3166 alpha-2 (например, \"RU\"). Пусто, если страну определить\nне удалось. Для кодов, общих у нескольких стран (например, +7 у России и Казахстана,\n+1 у США и Канады), страна определяется по последующим цифрам номера."
+          },
+          "country": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Название страны номера на русском языке (например, \"Россия\"). Пусто, если не определено."
+          },
+          "numberType": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PhoneNumberKind"
+              }
+            ],
+            "description": "Тип номера, определённый по его диапазону в справочнике нумерации."
+          },
+          "originalCarrier": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Оператор, которому ВЫДЕЛЕН диапазон номера (например, \"МТС\").\n\n\nВНИМАНИЕ, ЭТО НЕ ОБЯЗАТЕЛЬНО ОПЕРАТОР АБОНЕНТА. Здесь возвращается оператор ДИАПАЗОНА —\nтот, кому этот диапазон номеров выделен изначально. С 2013 года абонент вправе перенести\nномер к другому оператору, сохранив его (MNP, «мобильное рабство» отменено). Справочник\nнумерации о переносах не знает и знать не может: сведения о том, кто обслуживает\nКОНКРЕТНЫЙ номер сегодня, есть только у сети оператора. Доля перенесённых номеров в России\nисчисляется миллионами, поэтому для номера, выбранного наугад, это поле — обоснованная\nдогадка, а не факт. Не принимайте по нему решений, требующих точного знания оператора\n(например, тарификацию звонков или выбор SMS-маршрута).\nПусто, если оператор диапазона неизвестен или неприменим (например, для стационарных номеров)."
+          },
+          "location": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Географическая привязка ДИАПАЗОНА номера: город, регион или страна — насколько подробно\nпозволяет справочник (например, \"Москва и Московская область\"). Это место, к которому\nприписан диапазон, а не местоположение абонента: владелец мобильного номера физически может\nнаходиться где угодно. Пусто, если не определена."
+          },
+          "timeZones": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Часовые пояса, к которым относится диапазон номера, в формате базы IANA (например,\n\"Europe/Moscow\"). Обычно один, но у номеров больших стран их может быть несколько.\nПусто, если не определены."
+          }
+        },
+        "description": "Результат базового (офлайн) разбора номера: всё, что известно о номере из справочника\nмировой нумерации, без единого обращения в сеть."
+      },
+      "PhoneNumberKind": {
+        "enum": [
+          "Unknown",
+          "Mobile",
+          "FixedLine",
+          "FixedLineOrMobile",
+          "TollFree",
+          "PremiumRate",
+          "SharedCost",
+          "Voip",
+          "PersonalNumber",
+          "Pager",
+          "Uan",
+          "Voicemail"
+        ],
+        "description": "Тип телефонного номера, определённый по его диапазону в справочнике нумерации.\nЗначения передаются в JSON строкой: \"Mobile\", а не 1.\n\nЗначения:\n* `Unknown` — Тип определить не удалось (справочник не знает такого диапазона).\n* `Mobile` — Мобильный номер.\n* `FixedLine` — Стационарный (городской) номер.\n* `FixedLineOrMobile` — Диапазон, в котором стационарные и мобильные номера не разделены. Так устроена нумерация в ряде стран (например, в США), поэтому отличить одно от другого по справочнику невозможно.\n* `TollFree` — Бесплатный для звонящего номер (8-800 и мировые аналоги).\n* `PremiumRate` — Номер с повышенной тарификацией звонка (premium rate).\n* `SharedCost` — Номер с разделением платы между звонящим и принимающим (shared cost).\n* `Voip` — Номер IP-телефонии (VoIP).\n* `PersonalNumber` — Персональный номер, переадресуемый абонентом на любой другой.\n* `Pager` — Пейджер.\n* `Uan` — Универсальный номер доступа (UAN), обычно корпоративный.\n* `Voicemail` — Голосовая почта."
+      },
+      "PhoneReport": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string",
+            "description": "Номер в том виде, в каком он был передан в запросе."
+          },
+          "number": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PhoneNumberInfo"
+              }
+            ],
+            "description": "Результат офлайн-разбора номера. Заполняется всегда."
+          },
+          "elapsedMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Время выполнения запроса в миллисекундах.",
+            "format": "int64"
+          }
+        },
+        "description": "Полная карточка результата проверки телефонного номера одним плоским набором полей."
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyBearer": {
+        "type": "http",
+        "description": "The API key goes into the `Authorization: Bearer ak_…` header.\n\nKeys are created in your account: https://atlorium.com/Account/Manage/ApiKeys\n\nTo try it without registration and without being charged, use the demo key\n`ak_sandbox_demo_mockdata_v1` — it returns mock data and marks the response with\nthe `X-Atlorium-Sandbox: true` header.",
+        "scheme": "bearer",
+        "bearerFormat": "ak_…"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Phone Validation API",
+      "description": "API documentation for phone validation (fast number parsing: validity, E.164/international/national formats, country, number type, range carrier, region, time zones). The number's live network status is not checked.",
+      "externalDocs": {
+        "description": "Try it in the web interface",
+        "url": "https://atlorium.com/phoneGUI"
+      }
+    }
+  ],
+  "externalDocs": {
+    "description": "Service overview, examples and limitations",
+    "url": "https://atlorium.com/phoneDescription"
+  }
+}

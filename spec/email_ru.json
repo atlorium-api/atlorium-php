@@ -1,0 +1,376 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "API проверки почты",
+    "description": "Документация для API проверки почты (вердикт доставляемости адреса: существование ящика, MX-запись, catch-all-домен, одноразовые ящики, спам-ловушки, ролевые адреса, подсказка по опечатке в домене).\n\n### Авторизация\n\nВсе методы требуют API-ключ в заголовке запроса:\n\n```\nAuthorization: Bearer ak_ваш_ключ\n```\n\nКлючи создаются в личном кабинете, раздел [API-ключи](https://atlorium.com/Account/Manage/ApiKeys).\nГостевого доступа у API нет: запрос без ключа получает 401.\n\n### Песочница\n\nКлюч `ak_sandbox_demo_mockdata_v1` работает без регистрации и без списаний — возвращает\nправдоподобные демо-данные и помечает ответ заголовком `X-Atlorium-Sandbox: true`.\nУдобно проверить разбор ответа до подключения настоящего ключа.\n\n### Тарификация\n\nКредиты списываются **только за успешный ответ**. Отказы (400, 401, 402, 429, 5xx)\nне тарифицируются. Цены и бесплатные квоты — на странице [тарифов](https://atlorium.com/pricing),\nбаланс пополняется в [личном кабинете](https://atlorium.com/Account/Manage/Billing).\n\n### Ошибки\n\nЛюбой отказ возвращает **одну и ту же структуру** JSON — схема `ApiError` внизу страницы.\nРазбирать разные форматы под разные коды не нужно: машинный код причины всегда лежит\nв поле `error`.\n\n### Полезные ссылки\n\n* [Описание сервиса](https://atlorium.com/emailDescription) — что умеет, откуда данные, где границы применимости\n* [Веб-интерфейс](https://atlorium.com/emailGUI) — те же расчёты руками, без ключа\n* [Тарифы и лимиты](https://atlorium.com/pricing)\n* [Личный кабинет: API-ключи](https://atlorium.com/Account/Manage/ApiKeys)\n* [Личный кабинет: баланс и платежи](https://atlorium.com/Account/Manage/Billing)\n* [Блог](https://atlorium.com/blog) — разборы задач и примеры интеграции\n* [Сообщить о проблеме](https://atlorium.com/bug-report) · [support@atlorium.com](mailto:support@atlorium.com)\n* [Оферта](https://atlorium.com/terms-of-service) · [Политика обработки информации](https://atlorium.com/privacy-policy)",
+    "termsOfService": "https://atlorium.com/terms-of-service",
+    "contact": {
+      "name": "Atlorium",
+      "url": "https://atlorium.com/bug-report",
+      "email": "support@atlorium.com"
+    },
+    "license": {
+      "name": "Проприетарная — использование по оферте",
+      "url": "https://atlorium.com/terms-of-service"
+    },
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Текущий сервер (адрес берётся из строки браузера)"
+    }
+  ],
+  "paths": {
+    "/api/EmailValidation": {
+      "get": {
+        "tags": [
+          "API проверки почты"
+        ],
+        "summary": "Проверяет почтовый адрес: существует ли ящик, принимает ли домен почту, не одноразовый\nли это ящик, не спам-ловушка и не ролевой ли адрес.",
+        "description": "Пример запроса:\nGET /api/emailvalidation?email=user@example.com\n\nТАРИФИКАЦИЯ. Запрос не тарифицируется, если адрес синтаксически некорректен (400) либо\nесли проверить адрес не удалось и вернулся статус unknown (почтовый сервер домена\nприменил greylisting, не ответил или заблокировал проверку). Платите только за\nсодержательный вердикт.",
+        "parameters": [
+          {
+            "name": "email",
+            "in": "query",
+            "description": "Почтовый адрес для проверки. Пример: user@example.com",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ. Возвращает карточку проверки адреса.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailValidationReport"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailValidationReport"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailValidationReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Адрес не указан или синтаксически некорректен.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API-ключ отсутствует, просрочен или недействителен.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Недостаточно кредитов на балансе для выполнения запроса.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Превышен rate-limit. Повторите запрос позже.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "через 42 секунды"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Сервис проверки почты временно недоступен.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "maintenance",
+                  "title": "Проводятся плановые работы",
+                  "message": "Выполнение запросов временно приостановлено на время плановых работ. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "title": "Ошибка API",
+        "required": [
+          "error",
+          "title",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Машинный код причины отказа. Возможные значения:\n\n* `server_error` (500) — Сервис временно недоступен\n* `unauthorized` (401) — Требуется вход\n* `api_key_required` (401) — Нужен API-ключ\n* `account_not_activated` (402) — Аккаунт не активирован\n* `rate_limited_client` (429) — Слишком много запросов\n* `rate_limited_global` (429) — Высокая нагрузка на сервис\n* `provider_keys_exhausted` (429) — Сервис временно недоступен\n* `insufficient_credits` (402) — Недостаточно кредитов\n* `guest_quota_exhausted` (402) — Бесплатный лимит на сегодня исчерпан\n* `service_disabled` (503) — Проводятся плановые работы\n* `maintenance` (503) — Проводятся плановые работы\n* `guest_not_allowed` (402) — Нужна регистрация\n* `service_not_in_account_terms` (403) — Сервис не подключён\n* `bad_request` (400) — Некорректный запрос\n* `forbidden` (403) — Доступ запрещён\n* `not_found` (404) — Ничего не найдено\n* `method_not_allowed` (405) — Метод HTTP не поддерживается\n* `unsupported_media_type` (415) — Формат запроса не поддерживается\n* `not_implemented` (501) — Режим пока не реализован",
+            "example": "insufficient_credits"
+          },
+          "title": {
+            "type": "string",
+            "description": "Короткий заголовок для интерфейса.",
+            "example": "Недостаточно кредитов"
+          },
+          "message": {
+            "type": "string",
+            "description": "Подробное объяснение: что произошло и что с этим делать. Показывается пользователю целиком."
+          },
+          "balance": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Текущий баланс в кредитах. Заполняется при 402, чтобы не делать отдельный запрос за балансом; в остальных случаях null."
+          },
+          "retryAfterSeconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Через сколько секунд имеет смысл повторить запрос. Дублирует HTTP-заголовок Retry-After. null — если повтор не поможет (например, кончились кредиты)."
+          },
+          "retryAfterText": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Та же задержка готовой фразой — «через 2 мин 30 с». Чтобы клиентам не приходилось самим склонять минуты и секунды."
+          }
+        },
+        "description": "Единое тело ответа для любого отказа: и для ошибки валидации, и для отсутствующего ключа, и для исчерпанного лимита. Ветвиться в коде следует по полю `error` — это стабильный машинный код. Поля `title` и `message` предназначены человеку, их формулировки могут меняться."
+      },
+      "EmailStatus": {
+        "enum": [
+          "Valid",
+          "Invalid",
+          "CatchAll",
+          "Unknown",
+          "SpamTrap",
+          "Abuse",
+          "DoNotMail"
+        ],
+        "description": "Итоговый вердикт по адресу — семь возможных значений. Исходное строковое значение\nвердикта дополнительно возвращается в statusRaw,\nчтобы значение, появившееся в будущем, не потерялось при разборе ответа.\n\nЗначения:\n* `Valid` — Ящик существует и принимает почту. Можно писать.\n* `Invalid` — Ящика не существует либо домен не принимает почту. Письмо отскочит (hard bounce).\n* `CatchAll` — Домен принимает почту НА ЛЮБОЙ адрес (catch-all), поэтому существование конкретного ящика проверить снаружи невозможно. Не «плохо» и не «хорошо» — неопределённость.\n* `Unknown` — Проверить не удалось: почтовый сервер не ответил, применил greylisting или анти-спам. Такой ответ не тарифицируется — платить нужно только за содержательный вердикт.\n* `SpamTrap` — Адрес-ловушка для спамеров (spamtrap). Писать нельзя — убьёт репутацию домена.\n* `Abuse` — Владелец адреса ранее жаловался на спам (abuse). Писать крайне нежелательно.\n* `DoNotMail` — «Не писать»: role-адрес (info@, sales@), одноразовый ящик, токсичный домен или адрес из глобального списка исключений. Технически может работать, но рассылать на него нельзя."
+      },
+      "EmailValidationReport": {
+        "required": [
+          "email",
+          "status",
+          "statusRaw"
+        ],
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "Проверенный адрес в нормализованном виде (обрезанные пробелы, нижний регистр домена)."
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EmailStatus"
+              }
+            ],
+            "description": "Итоговый вердикт."
+          },
+          "statusRaw": {
+            "type": "string",
+            "description": "Вердикт в исходном строковом виде (\"valid\", \"catch-all\", \"do_not_mail\", ...).\nПозволяет отличить значение, которого ещё нет в перечислении, от\nunknown."
+          },
+          "subStatus": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Уточнение вердикта: \"mailbox_not_found\", \"disposable\", \"role_based\", \"greylisted\" и т.п.\nПусто, когда уточнения нет (обычно у чистого \"valid\"). Расшифровку см. в EmailSubStatusCatalog."
+          },
+          "account": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Часть адреса ДО «@» (локальная часть)."
+          },
+          "domain": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Часть адреса ПОСЛЕ «@» (домен)."
+          },
+          "freeEmail": {
+            "type": "boolean",
+            "description": "true — адрес на бесплатном публичном почтовике (gmail.com, mail.ru, yandex.ru...)."
+          },
+          "catchAllDomain": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "true — домен настроен как catch-all (отвечает «валидно» на любой ящик), false — нет,\nnull — определить не удалось."
+          },
+          "didYouMean": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Предполагаемое исправление опечатки в домене (\"gmial.com\" → \"user@gmail.com\").\nnull, когда опечатки не видно. Отличный сигнал для формы регистрации."
+          },
+          "domainAgeDays": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Возраст домена в днях. null, если возраст неизвестен. Молодой домен — повод насторожиться.",
+            "format": "int32"
+          },
+          "smtpProvider": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Почтовая платформа домена (\"g-suite\", \"outlook\", ...). null, если не определена."
+          },
+          "mxFound": {
+            "type": "boolean",
+            "description": "true — у домена есть MX-запись (то есть он в принципе может принимать почту)."
+          },
+          "mxRecord": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Приоритетная MX-запись домена (\"aspmx.l.google.com\"). null, если MX не найдены."
+          },
+          "activeInDays": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Давность последней активности адреса (\"30\", \"60\", ..., \"365+\"). Признак доступен\nне для всех адресов; если сведений об активности нет — null."
+          },
+          "activeFirstSeen": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Дата первого зафиксированного сигнала активности. Как и activeInDays,\nдоступна не для всех адресов — тогда null."
+          },
+          "processedAtUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Момент, когда адрес был проверен (UTC). null, если время проверки неизвестно.",
+            "format": "date-time"
+          },
+          "elapsedMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Длительность обработки запроса в миллисекундах.",
+            "format": "int64"
+          },
+          "deliverable": {
+            "type": "boolean",
+            "description": "Можно ли безопасно писать на адрес. true только для valid:\ncatch-all и unknown — неопределённость, остальное — явный запрет."
+          }
+        },
+        "description": "Карточка проверки одного почтового адреса: вердикт доставляемости и признаки,\nна которых он основан."
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyBearer": {
+        "type": "http",
+        "description": "API-ключ передаётся в заголовке `Authorization: Bearer ak_…`.\n\nКлючи создаются в личном кабинете: https://atlorium.com/Account/Manage/ApiKeys\n\nЧтобы попробовать без регистрации и без списаний, вставьте демо-ключ\n`ak_sandbox_demo_mockdata_v1` — он возвращает моковые данные и помечает ответ\nзаголовком `X-Atlorium-Sandbox: true`.",
+        "scheme": "bearer",
+        "bearerFormat": "ak_…"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "API проверки почты",
+      "description": "Документация для API проверки почты (вердикт доставляемости адреса: существование ящика, MX-запись, catch-all-домен, одноразовые ящики, спам-ловушки, ролевые адреса, подсказка по опечатке в домене).",
+      "externalDocs": {
+        "description": "Попробовать в веб-интерфейсе",
+        "url": "https://atlorium.com/emailGUI"
+      }
+    }
+  ],
+  "externalDocs": {
+    "description": "Описание сервиса, примеры и границы применимости",
+    "url": "https://atlorium.com/emailDescription"
+  }
+}

@@ -1,0 +1,602 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "API разбора Cron-выражений",
+    "description": "Документация для API проверки и генерации cron-выражений.\n\n### Авторизация\n\nВсе методы требуют API-ключ в заголовке запроса:\n\n```\nAuthorization: Bearer ak_ваш_ключ\n```\n\nКлючи создаются в личном кабинете, раздел [API-ключи](https://atlorium.com/Account/Manage/ApiKeys).\nГостевого доступа у API нет: запрос без ключа получает 401.\n\n### Песочница\n\nКлюч `ak_sandbox_demo_mockdata_v1` работает без регистрации и без списаний — возвращает\nправдоподобные демо-данные и помечает ответ заголовком `X-Atlorium-Sandbox: true`.\nУдобно проверить разбор ответа до подключения настоящего ключа.\n\n### Тарификация\n\nКредиты списываются **только за успешный ответ**. Отказы (400, 401, 402, 429, 5xx)\nне тарифицируются. Цены и бесплатные квоты — на странице [тарифов](https://atlorium.com/pricing),\nбаланс пополняется в [личном кабинете](https://atlorium.com/Account/Manage/Billing).\n\n### Ошибки\n\nЛюбой отказ возвращает **одну и ту же структуру** JSON — схема `ApiError` внизу страницы.\nРазбирать разные форматы под разные коды не нужно: машинный код причины всегда лежит\nв поле `error`.\n\n### Полезные ссылки\n\n* [Описание сервиса](https://atlorium.com/cronDescription) — что умеет, откуда данные, где границы применимости\n* [Веб-интерфейс](https://atlorium.com/cronGUI) — те же расчёты руками, без ключа\n* [Тарифы и лимиты](https://atlorium.com/pricing)\n* [Личный кабинет: API-ключи](https://atlorium.com/Account/Manage/ApiKeys)\n* [Личный кабинет: баланс и платежи](https://atlorium.com/Account/Manage/Billing)\n* [Блог](https://atlorium.com/blog) — разборы задач и примеры интеграции\n* [Сообщить о проблеме](https://atlorium.com/bug-report) · [support@atlorium.com](mailto:support@atlorium.com)\n* [Оферта](https://atlorium.com/terms-of-service) · [Политика обработки информации](https://atlorium.com/privacy-policy)",
+    "termsOfService": "https://atlorium.com/terms-of-service",
+    "contact": {
+      "name": "Atlorium",
+      "url": "https://atlorium.com/bug-report",
+      "email": "support@atlorium.com"
+    },
+    "license": {
+      "name": "Проприетарная — использование по оферте",
+      "url": "https://atlorium.com/terms-of-service"
+    },
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Текущий сервер (адрес берётся из строки браузера)"
+    }
+  ],
+  "paths": {
+    "/api/Cron/evaluate": {
+      "post": {
+        "tags": [
+          "API разбора Cron-выражений"
+        ],
+        "summary": "Парсит и валидирует cron-выражение, возвращает ближайшие даты запуска.\nПозволяет проверить корректность выражения и увидеть, когда оно сработает.",
+        "description": "Пример запроса:\nPOST /api/cron/evaluate\nBody: {\n  \"expression\": \"0 9 * * 1-5\",\n  \"timeZoneId\": \"Europe/Moscow\",\n  \"take\": 5\n}\n\nПример ответа:\n{\n  \"isValid\": true,\n  \"description\": \"В 09:00, по будням с понедельника по пятницу\",\n  \"nextOccurrences\": [\"2024-01-15T09:00:00+03:00\", ...]\n}",
+        "requestBody": {
+          "description": "Объект запроса с параметрами:\n\n- Expression (обязательный): CRON-выражение для анализа.\n  Примеры: \"0 9 * * 1-5\" (каждый будний день в 9:00),\n          \"*/15 * * * *\" (каждые 15 минут),\n          \"0 0 1 * *\" (первый день каждого месяца в полночь)\n\n- TimeZoneId (необязательный): Идентификатор часового пояса.\n  Примеры: \"Europe/Moscow\", \"America/New_York\", \"UTC\".\n  По умолчанию: UTC\n\n- FromUtc (необязательный): Начальная дата для вычисления запусков.\n  По умолчанию: текущее время\n\n- Take (необязательный): Количество ближайших запусков для вывода.\n  Допустимые значения: от 1 до 100\n  По умолчанию: значение из запроса (ограничено до 100)",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CronEvaluateRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CronEvaluateRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CronEvaluateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Успешный ответ. Возвращает результат парсинга с ближайшими датами запуска\nили информацию об ошибке валидации.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CronEvaluationResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CronEvaluationResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CronEvaluationResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Некорректные параметры запроса:\n- Объект запроса отсутствует (null)\n- Cron-выражение не указано или пустое",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API-ключ отсутствует, просрочен или недействителен.\nДобавьте заголовок запроса: Authorization: Bearer {api_key}",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Недостаточно кредитов на балансе для выполнения запроса.\nПополните баланс в личном кабинете: /Account/Manage/Billing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Превышен rate-limit: исчерпана дневная или минутная квота для данного сервиса.\nПовторите запрос позже.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "через 42 секунды"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Непредвиденная внутренняя ошибка при парсинге cron-выражения.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "server_error",
+                  "title": "Сервис временно недоступен",
+                  "message": "Запрос не может быть обработан прямо сейчас. Повторите попытку через несколько минут. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/Cron/build": {
+      "post": {
+        "tags": [
+          "API разбора Cron-выражений"
+        ],
+        "summary": "Генерирует cron-строку по заданному шаблону и параметрам.\nУпрощает создание cron-выражений для типовых сценариев.",
+        "description": "Примеры запросов:\n\n1. Каждый день в 9:30:\nPOST /api/cron/build\nBody: { \"template\": \"Daily\", \"hour\": 9, \"minute\": 30 }\nРезультат: \"30 9 * * *\"\n\n2. Каждый понедельник в 10:00:\nPOST /api/cron/build\nBody: { \"template\": \"Weekly\", \"dayOfWeek\": 1, \"hour\": 10, \"minute\": 0 }\nРезультат: \"0 10 * * 1\"\n\n3. Каждые 15 минут:\nPOST /api/cron/build\nBody: { \"template\": \"EveryMinute\", \"interval\": 15 }\nРезультат: \"*/15 * * * *\"",
+        "requestBody": {
+          "description": "Объект запроса с параметрами генерации:\n\n- Template: Тип шаблона расписания\n  (EveryMinute, Hourly, Daily, Weekly, Monthly, Yearly, Custom)\n\n- Hour (для Daily/Weekly/Monthly/Yearly): Час запуска (0-23)\n- Minute: Минута запуска (0-59)\n- DayOfWeek (для Weekly): День недели (0-6, где 0 = воскресенье)\n- DayOfMonth (для Monthly/Yearly): День месяца (1-31)\n- Month (для Yearly): Месяц (1-12)\n- Interval (для EveryMinute): Интервал в минутах",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CronBuildRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CronBuildRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CronBuildRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Успешный ответ. Возвращает сгенерированное cron-выражение.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CronBuildResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CronBuildResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CronBuildResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Некорректные параметры запроса:\n- Объект запроса отсутствует (null)\n- Параметры шаблона некорректны",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API-ключ отсутствует, просрочен или недействителен.\nДобавьте заголовок запроса: Authorization: Bearer {api_key}",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Недостаточно кредитов на балансе для выполнения запроса.\nПополните баланс в личном кабинете: /Account/Manage/Billing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Превышен rate-limit: исчерпана дневная или минутная квота для данного сервиса.\nПовторите запрос позже.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "через 42 секунды"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Непредвиденная внутренняя ошибка при генерации cron-выражения.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "server_error",
+                  "title": "Сервис временно недоступен",
+                  "message": "Запрос не может быть обработан прямо сейчас. Повторите попытку через несколько минут. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "title": "Ошибка API",
+        "required": [
+          "error",
+          "title",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Машинный код причины отказа. Возможные значения:\n\n* `server_error` (500) — Сервис временно недоступен\n* `unauthorized` (401) — Требуется вход\n* `api_key_required` (401) — Нужен API-ключ\n* `account_not_activated` (402) — Аккаунт не активирован\n* `rate_limited_client` (429) — Слишком много запросов\n* `rate_limited_global` (429) — Высокая нагрузка на сервис\n* `provider_keys_exhausted` (429) — Сервис временно недоступен\n* `insufficient_credits` (402) — Недостаточно кредитов\n* `guest_quota_exhausted` (402) — Бесплатный лимит на сегодня исчерпан\n* `service_disabled` (503) — Проводятся плановые работы\n* `maintenance` (503) — Проводятся плановые работы\n* `guest_not_allowed` (402) — Нужна регистрация\n* `service_not_in_account_terms` (403) — Сервис не подключён\n* `bad_request` (400) — Некорректный запрос\n* `forbidden` (403) — Доступ запрещён\n* `not_found` (404) — Ничего не найдено\n* `method_not_allowed` (405) — Метод HTTP не поддерживается\n* `unsupported_media_type` (415) — Формат запроса не поддерживается\n* `not_implemented` (501) — Режим пока не реализован",
+            "example": "insufficient_credits"
+          },
+          "title": {
+            "type": "string",
+            "description": "Короткий заголовок для интерфейса.",
+            "example": "Недостаточно кредитов"
+          },
+          "message": {
+            "type": "string",
+            "description": "Подробное объяснение: что произошло и что с этим делать. Показывается пользователю целиком."
+          },
+          "balance": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Текущий баланс в кредитах. Заполняется при 402, чтобы не делать отдельный запрос за балансом; в остальных случаях null."
+          },
+          "retryAfterSeconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Через сколько секунд имеет смысл повторить запрос. Дублирует HTTP-заголовок Retry-After. null — если повтор не поможет (например, кончились кредиты)."
+          },
+          "retryAfterText": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Та же задержка готовой фразой — «через 2 мин 30 с». Чтобы клиентам не приходилось самим склонять минуты и секунды."
+          }
+        },
+        "description": "Единое тело ответа для любого отказа: и для ошибки валидации, и для отсутствующего ключа, и для исчерпанного лимита. Ветвиться в коде следует по полю `error` — это стабильный машинный код. Поля `title` и `message` предназначены человеку, их формулировки могут меняться."
+      },
+      "CronBuildRequest": {
+        "type": "object",
+        "properties": {
+          "template": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CronTemplateType"
+              }
+            ],
+            "description": "Заготовка расписания. От неё зависит, какие из остальных полей вообще учитываются:\nинтервал нужен только шаблонам с шагом, дни недели — недельному, число месяца — месячному."
+          },
+          "interval": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Шаг для шаблонов «каждые N минут» и «каждые N часов»; остальными шаблонами игнорируется.\nПример: шаблон «каждые N минут» с интервалом 15 даёт в поле минут */15.",
+            "format": "int32"
+          },
+          "timeOfDay": {
+            "pattern": "^-?(\\d+\\.)?\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?$",
+            "type": "string",
+            "description": "Время суток для суточного, недельного и месячного расписаний. Например, 09:30 —\nзапуск в половине десятого утра."
+          },
+          "dayOfMonth": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Число месяца (1–31) для месячного расписания. Учитывайте короткие месяцы: 31-е число\nпропустит февраль, апрель, июнь, сентябрь и ноябрь.",
+            "format": "int32"
+          },
+          "weekDays": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DayOfWeek"
+            },
+            "description": "Дни недели для недельного расписания. Можно выбрать несколько — запуск произойдёт\nв каждый из них."
+          },
+          "includeSeconds": {
+            "type": "boolean",
+            "description": "Добавлять ли в выражение поле секунд. true даёт шесть полей (диалект Quartz),\nfalse — классические пять полей Unix cron. Выбирать нужно по тому планировщику,\nкуда выражение потом вставят: лишнее поле секунд он разберёт неверно."
+          }
+        },
+        "description": "Параметры, из которых собирается cron-выражение."
+      },
+      "CronBuildResult": {
+        "type": "object",
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "Готовое cron-выражение. Пустая строка, если собрать не удалось."
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Замечания к собранному расписанию: оно рабочее, но сработает не всегда так, как ждут.\nПример: выбрано 31-е число — в коротких месяцах запуска не будет."
+          },
+          "error": {
+            "type": "string",
+            "description": "Причина, по которой выражение собрать не удалось: недопустимый интервал,\nне выбран ни один день недели. Пустая строка при успехе."
+          },
+          "success": {
+            "type": "boolean",
+            "description": "Удалось ли собрать выражение. Вычисляется по пустоте error."
+          }
+        },
+        "description": "Результат сборки cron-строки."
+      },
+      "CronEvaluateRequest": {
+        "type": "object",
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "Cron-выражение (5 или 6 полей, допускается ? из Quartz)."
+          },
+          "timeZoneId": {
+            "type": "string",
+            "description": "Часовой пояс для расчёта (Id из TimeZoneInfo)."
+          },
+          "fromUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Стартовая точка расчёта (UTC). Если не задана — сейчас.",
+            "format": "date-time"
+          },
+          "take": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество ближайших запусков (1-100).",
+            "format": "int32"
+          }
+        },
+        "description": "Запрос на оценку cron-выражения через API."
+      },
+      "CronEvaluationResult": {
+        "type": "object",
+        "properties": {
+          "isValid": {
+            "type": "boolean",
+            "description": "Разобралось ли выражение. При false причина лежит в error,\nа список ближайших запусков будет пустым."
+          },
+          "rawExpression": {
+            "type": "string",
+            "description": "Выражение ровно в том виде, в каком его прислали, — без правок и нормализации."
+          },
+          "normalizedExpression": {
+            "type": "string",
+            "description": "Приведённое к единому виду выражение: подставлены пропущенные поля, знак ?\nиз диалекта Quartz заменён на *, лишние пробелы убраны. Именно эту строку\nстоит сохранять у себя — она означает то же самое, но читается однозначно."
+          },
+          "error": {
+            "type": "string",
+            "description": "Причина, по которой выражение признано некорректным: неверное число полей,\nзначение вне диапазона, нераспознанный символ. Пустая строка при успешном разборе."
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Предупреждения о выражении, которое формально верно, но почти наверняка сработает\nне так, как задумано. Пример: запуск 31-го числа — в феврале, апреле, июне, сентябре\nи ноябре его не будет вовсе. Наличие предупреждений НЕ делает выражение недействительным."
+          },
+          "segments": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Пояснение к каждому полю выражения по-человечески: «минуты: каждые 15»,\n«день недели: понедельник». Порядок совпадает с порядком полей\nв normalizedExpression."
+          },
+          "occurrences": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Ближайшие моменты срабатывания расписания, по возрастанию. Считаются в часовом поясе\ntimeZone, поэтому переход на летнее время уже учтён. Сколько запусков\nвернуть — задаётся в запросе."
+          },
+          "timeZone": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TimeZoneInfo"
+              }
+            ],
+            "description": "Часовой пояс, в котором посчитаны запуски. Одно и то же выражение в разных поясах\nсрабатывает в разное время, поэтому пояс возвращается вместе с результатом."
+          }
+        },
+        "description": "Результат разбора и оценки cron-выражения."
+      },
+      "CronTemplateType": {
+        "type": "integer",
+        "description": "Типовая заготовка расписания для простого конструктора.\n\nЗначения:\n* `EveryMinute` — Каждую минуту.\n* `EveryNMinutes` — Каждые N минут; шаг задаётся полем интервала.\n* `Hourly` — Раз в час, в начале часа.\n* `EveryNHours` — Каждые N часов; шаг задаётся полем интервала.\n* `Daily` — Раз в сутки, в заданное время.\n* `Weekly` — В выбранные дни недели, в заданное время.\n* `Monthly` — Раз в месяц, в заданное число и время."
+      },
+      "DayOfWeek": {
+        "type": "integer"
+      },
+      "TimeZoneInfo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Идентификатор часового пояса. Единственное поле, которое стоит использовать в коде: именно его принимают и наши методы, и планировщики задач. Примеры: «Russian Standard Time» (нотация Windows), «Europe/Moscow» (нотация IANA)."
+          },
+          "hasIanaId": {
+            "type": "boolean",
+            "description": "Записан ли идентификатор в нотации IANA (Europe/Moscow), а не Windows."
+          },
+          "displayName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Человекочитаемое название пояса со смещением. Язык названия зависит от настроек сервера, поэтому опираться на него в коде нельзя."
+          },
+          "standardName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Название стандартного (зимнего) времени пояса."
+          },
+          "daylightName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Название летнего времени пояса. У поясов без перевода часов совпадает со стандартным."
+          },
+          "baseUtcOffset": {
+            "pattern": "^-?(\\d+\\.)?\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?$",
+            "type": "string",
+            "description": "Базовое смещение относительно UTC без учёта перевода часов, в формате «часы:минуты:секунды». Для Москвы — «03:00:00»."
+          },
+          "supportsDaylightSavingTime": {
+            "type": "boolean",
+            "description": "Переводятся ли в этом поясе часы на летнее время. В России — нет; для поясов, где перевод есть, время запусков в расписании сдвигается дважды в год."
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyBearer": {
+        "type": "http",
+        "description": "API-ключ передаётся в заголовке `Authorization: Bearer ak_…`.\n\nКлючи создаются в личном кабинете: https://atlorium.com/Account/Manage/ApiKeys\n\nЧтобы попробовать без регистрации и без списаний, вставьте демо-ключ\n`ak_sandbox_demo_mockdata_v1` — он возвращает моковые данные и помечает ответ\nзаголовком `X-Atlorium-Sandbox: true`.",
+        "scheme": "bearer",
+        "bearerFormat": "ak_…"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "API разбора Cron-выражений",
+      "description": "Документация для API проверки и генерации cron-выражений.",
+      "externalDocs": {
+        "description": "Попробовать в веб-интерфейсе",
+        "url": "https://atlorium.com/cronGUI"
+      }
+    }
+  ],
+  "externalDocs": {
+    "description": "Описание сервиса, примеры и границы применимости",
+    "url": "https://atlorium.com/cronDescription"
+  }
+}

@@ -1,0 +1,640 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "API погодных данных",
+    "description": "Документация для API по получению погодных данных.\n\n### Авторизация\n\nВсе методы требуют API-ключ в заголовке запроса:\n\n```\nAuthorization: Bearer ak_ваш_ключ\n```\n\nКлючи создаются в личном кабинете, раздел [API-ключи](https://atlorium.com/Account/Manage/ApiKeys).\nГостевого доступа у API нет: запрос без ключа получает 401.\n\n### Песочница\n\nКлюч `ak_sandbox_demo_mockdata_v1` работает без регистрации и без списаний — возвращает\nправдоподобные демо-данные и помечает ответ заголовком `X-Atlorium-Sandbox: true`.\nУдобно проверить разбор ответа до подключения настоящего ключа.\n\n### Тарификация\n\nКредиты списываются **только за успешный ответ**. Отказы (400, 401, 402, 429, 5xx)\nне тарифицируются. Цены и бесплатные квоты — на странице [тарифов](https://atlorium.com/pricing),\nбаланс пополняется в [личном кабинете](https://atlorium.com/Account/Manage/Billing).\n\n### Ошибки\n\nЛюбой отказ возвращает **одну и ту же структуру** JSON — схема `ApiError` внизу страницы.\nРазбирать разные форматы под разные коды не нужно: машинный код причины всегда лежит\nв поле `error`.\n\n### Полезные ссылки\n\n* [Описание сервиса](https://atlorium.com/wDescription) — что умеет, откуда данные, где границы применимости\n* [Веб-интерфейс](https://atlorium.com/wGUI) — те же расчёты руками, без ключа\n* [Тарифы и лимиты](https://atlorium.com/pricing)\n* [Личный кабинет: API-ключи](https://atlorium.com/Account/Manage/ApiKeys)\n* [Личный кабинет: баланс и платежи](https://atlorium.com/Account/Manage/Billing)\n* [Блог](https://atlorium.com/blog) — разборы задач и примеры интеграции\n* [Сообщить о проблеме](https://atlorium.com/bug-report) · [support@atlorium.com](mailto:support@atlorium.com)\n* [Оферта](https://atlorium.com/terms-of-service) · [Политика обработки информации](https://atlorium.com/privacy-policy)",
+    "termsOfService": "https://atlorium.com/terms-of-service",
+    "contact": {
+      "name": "Atlorium",
+      "url": "https://atlorium.com/bug-report",
+      "email": "support@atlorium.com"
+    },
+    "license": {
+      "name": "Проприетарная — использование по оферте",
+      "url": "https://atlorium.com/terms-of-service"
+    },
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Текущий сервер (адрес берётся из строки браузера)"
+    }
+  ],
+  "paths": {
+    "/api/Weather": {
+      "get": {
+        "tags": [
+          "API погодных данных"
+        ],
+        "summary": "Получает текущие погодные данные для указанных географических координат.",
+        "description": "Пример запроса для Москвы:\nGET /api/weather?latitude=55.7558&longitude=37.6173\n\nПример запроса для Санкт-Петербурга:\nGET /api/weather?latitude=59.9343&longitude=30.3351\n\nОграничения:\n- При превышении лимита запросов возвращается код 429\n- Координаты должны быть в допустимых диапазонах",
+        "parameters": [
+          {
+            "name": "latitude",
+            "in": "query",
+            "description": "Географическая широта в градусах (десятичный формат).\n\nДопустимые значения: от -90.0 до +90.0\n- Положительные значения: Северное полушарие (например, 55.7558 — Москва)\n- Отрицательные значения: Южное полушарие (например, -33.8688 — Сидней)\n- 0: Экватор\n\nПримеры: 55.7558 (Москва), 51.5074 (Лондон), 40.7128 (Нью-Йорк)",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double"
+            }
+          },
+          {
+            "name": "longitude",
+            "in": "query",
+            "description": "Географическая долгота в градусах (десятичный формат).\n\nДопустимые значения: от -180.0 до +180.0\n- Положительные значения: Восточное полушарие (например, 37.6173 — Москва)\n- Отрицательные значения: Западное полушарие (например, -74.0060 — Нью-Йорк)\n- 0: Нулевой меридиан (Гринвич)\n\nПримеры: 37.6173 (Москва), -0.1278 (Лондон), -74.0060 (Нью-Йорк)",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ. Возвращает объект с погодными данными для указанных координат.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeatherData"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeatherData"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeatherData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Некорректные параметры запроса:\n- Широта вне диапазона [-90, 90]\n- Долгота вне диапазона [-180, 180]",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API-ключ отсутствует, просрочен или недействителен.\nДобавьте заголовок запроса: Authorization: Bearer {api_key}",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Недостаточно кредитов на балансе для выполнения запроса.\nПополните баланс в личном кабинете: /Account/Manage/Billing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Превышен rate-limit: исчерпана дневная или минутная квота для данного сервиса.\nПовторите запрос позже.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "через 42 секунды"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Погодные данные временно недоступны: сервис не смог получить сводку по точке\nили превысил время ожидания ответа.\n\nИменно этим кодом сервис отвечает на сбой получения погоды, а не 500:\nпроблема временная, запрос имеет смысл повторить позже. Деньги за такой\nответ не списываются.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "maintenance",
+                  "title": "Проводятся плановые работы",
+                  "message": "Выполнение запросов временно приостановлено на время плановых работ. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "title": "Ошибка API",
+        "required": [
+          "error",
+          "title",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Машинный код причины отказа. Возможные значения:\n\n* `server_error` (500) — Сервис временно недоступен\n* `unauthorized` (401) — Требуется вход\n* `api_key_required` (401) — Нужен API-ключ\n* `account_not_activated` (402) — Аккаунт не активирован\n* `rate_limited_client` (429) — Слишком много запросов\n* `rate_limited_global` (429) — Высокая нагрузка на сервис\n* `provider_keys_exhausted` (429) — Сервис временно недоступен\n* `insufficient_credits` (402) — Недостаточно кредитов\n* `guest_quota_exhausted` (402) — Бесплатный лимит на сегодня исчерпан\n* `service_disabled` (503) — Проводятся плановые работы\n* `maintenance` (503) — Проводятся плановые работы\n* `guest_not_allowed` (402) — Нужна регистрация\n* `service_not_in_account_terms` (403) — Сервис не подключён\n* `bad_request` (400) — Некорректный запрос\n* `forbidden` (403) — Доступ запрещён\n* `not_found` (404) — Ничего не найдено\n* `method_not_allowed` (405) — Метод HTTP не поддерживается\n* `unsupported_media_type` (415) — Формат запроса не поддерживается\n* `not_implemented` (501) — Режим пока не реализован",
+            "example": "insufficient_credits"
+          },
+          "title": {
+            "type": "string",
+            "description": "Короткий заголовок для интерфейса.",
+            "example": "Недостаточно кредитов"
+          },
+          "message": {
+            "type": "string",
+            "description": "Подробное объяснение: что произошло и что с этим делать. Показывается пользователю целиком."
+          },
+          "balance": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Текущий баланс в кредитах. Заполняется при 402, чтобы не делать отдельный запрос за балансом; в остальных случаях null."
+          },
+          "retryAfterSeconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Через сколько секунд имеет смысл повторить запрос. Дублирует HTTP-заголовок Retry-After. null — если повтор не поможет (например, кончились кредиты)."
+          },
+          "retryAfterText": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Та же задержка готовой фразой — «через 2 мин 30 с». Чтобы клиентам не приходилось самим склонять минуты и секунды."
+          }
+        },
+        "description": "Единое тело ответа для любого отказа: и для ошибки валидации, и для отсутствующего ключа, и для исчерпанного лимита. Ветвиться в коде следует по полю `error` — это стабильный машинный код. Поля `title` и `message` предназначены человеку, их формулировки могут меняться."
+      },
+      "Clouds": {
+        "type": "object",
+        "properties": {
+          "all": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Доля неба, закрытая облаками, в процентах: 0 — ясно, 100 — сплошная облачность.",
+            "format": "int32"
+          }
+        },
+        "description": "Облачность."
+      },
+      "Coord": {
+        "type": "object",
+        "properties": {
+          "lon": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Долгота в градусах, от −180 (запад) до +180 (восток).",
+            "format": "double"
+          },
+          "lat": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Широта в градусах, от −90 (Южный полюс) до +90 (Северный полюс).",
+            "format": "double"
+          }
+        },
+        "description": "Географические координаты точки."
+      },
+      "Main": {
+        "type": "object",
+        "properties": {
+          "temp": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Температура воздуха в градусах Цельсия.",
+            "format": "double"
+          },
+          "feels_like": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Ощущаемая температура в градусах Цельсия — с поправкой на ветер и влажность.\nИменно её показывают человеку: при −5 °C и сильном ветре ощущается как −12 °C.",
+            "format": "double"
+          },
+          "pressure": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Атмосферное давление на уровне моря в гектопаскалях (гПа). Норма — около 1013.",
+            "format": "int32"
+          },
+          "humidity": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Относительная влажность воздуха в процентах.",
+            "format": "int32"
+          },
+          "temp_min": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Минимальная температура по территории в градусах Цельсия. Для крупных городов\nрасходится с temp: в разных районах измерения отличаются.",
+            "format": "double"
+          },
+          "temp_max": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Максимальная температура по территории в градусах Цельсия.",
+            "format": "double"
+          },
+          "sea_level": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Давление на уровне моря в гПа. null — если измерение недоступно.",
+            "format": "int32"
+          },
+          "grnd_level": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Давление на уровне земли в гПа — с поправкой на высоту точки над уровнем моря.\nnull — если измерение недоступно.",
+            "format": "int32"
+          }
+        },
+        "description": "Основные измеримые показатели погоды."
+      },
+      "Precipitation": {
+        "type": "object",
+        "properties": {
+          "1h": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Объём осадков за последний час, в миллиметрах.",
+            "format": "double"
+          },
+          "3h": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Объём осадков за последние три часа, в миллиметрах.",
+            "format": "double"
+          }
+        },
+        "description": "Объём осадков. Заполняется только то поле, по которому есть измерение,\nпоэтому оба значения могут быть null одновременно."
+      },
+      "Sys": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Служебный признак типа станции наблюдения. Прикладного смысла не несёт.",
+            "format": "int32"
+          },
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Служебный идентификатор станции наблюдения.",
+            "format": "int32"
+          },
+          "message": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Служебный параметр метеорологической сводки. Прикладного смысла не несёт.",
+            "format": "double"
+          },
+          "country": {
+            "type": "string",
+            "description": "Код страны по стандарту ISO 3166-1 alpha-2: RU, KZ, DE."
+          },
+          "sunrise": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Время восхода солнца в формате Unix-времени (секунды, UTC). Для местного времени\nточки прибавьте timezone.",
+            "format": "int64"
+          },
+          "sunset": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Время заката солнца в формате Unix-времени (секунды, UTC).",
+            "format": "int64"
+          }
+        },
+        "description": "Сведения о стране и о времени восхода и заката."
+      },
+      "Weather": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Код явления. Диапазон задаёт группу: 2xx — гроза, 3xx — морось, 5xx — дождь,\n6xx — снег, 7xx — атмосферные явления (туман, дымка, пыль), 800 — ясно,\n80x — облачность. Ветвиться в коде надёжнее по этому числу, чем по тексту описания.",
+            "format": "int32"
+          },
+          "main": {
+            "type": "string",
+            "description": "Короткое название группы явления на английском: Rain, Clouds, Clear."
+          },
+          "description": {
+            "type": "string",
+            "description": "Описание явления на русском языке: «небольшой дождь», «переменная облачность»."
+          },
+          "icon": {
+            "type": "string",
+            "description": "Код иконки явления, например 10d или 04n. Последняя буква — время суток:\nd — день, n — ночь. Картинка по коду отдаётся эндпоинтом иконок."
+          }
+        },
+        "description": "Одно погодное явление: код, короткое имя, описание и иконка."
+      },
+      "WeatherData": {
+        "type": "object",
+        "properties": {
+          "coord": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Coord"
+              }
+            ],
+            "description": "Координаты точки, для которой отдана погода."
+          },
+          "weather": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Weather"
+            },
+            "description": "Погодные явления в точке. Как правило один элемент, но при сочетании явлений\n(например, дождь с грозой) их может быть несколько — основным считается первый."
+          },
+          "base": {
+            "type": "string",
+            "description": "Служебная пометка метеорологической службы. Прикладного смысла\nне несёт, оставлена для полноты ответа."
+          },
+          "main": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Main"
+              }
+            ],
+            "description": "Основные измеримые показатели: температура, давление, влажность."
+          },
+          "visibility": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Дальность видимости в метрах. Максимальное значение — 10 000 (десять километров),\nдальше метеостанции не измеряют. null — если измерение недоступно.",
+            "format": "int32"
+          },
+          "wind": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Wind"
+              }
+            ],
+            "description": "Ветер: скорость, направление и порывы."
+          },
+          "clouds": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Clouds"
+              }
+            ],
+            "description": "Облачность."
+          },
+          "rain": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Precipitation"
+              }
+            ],
+            "description": "Объём выпавшего дождя. null — если дождя нет; поле в этом случае просто отсутствует,\nа не приходит нулём."
+          },
+          "snow": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Precipitation"
+              }
+            ],
+            "description": "Объём выпавшего снега. null — если снега нет."
+          },
+          "dt": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Момент, на который актуальны данные, в формате Unix-времени (секунды с 1 января 1970\nгода, UTC). Пример: 1 700 000 000 — это 14 ноября 2023 года, 22:13 UTC.\nЧтобы получить местное время точки, прибавьте timezone.",
+            "format": "int64"
+          },
+          "sys": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Sys"
+              }
+            ],
+            "description": "Сведения о стране и о времени восхода и заката."
+          },
+          "timezone": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Сдвиг местного времени точки относительно UTC в секундах. Для Москвы — 10800\n(плюс три часа). Отрицательное значение — часовой пояс западнее Гринвича.",
+            "format": "int32"
+          },
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Идентификатор населённого пункта в справочнике метеорологических станций.",
+            "format": "int32"
+          },
+          "name": {
+            "type": "string",
+            "description": "Название ближайшего населённого пункта. Для точки в поле или в море может не совпадать\nс ожидаемым: выбирается ближайшая известная точка наблюдения."
+          },
+          "cod": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Служебный код метеорологической сводки (200 — успех). На HTTP-код ответа API\nне влияет: при сбое сервис вернёт собственный код и тело ошибки.",
+            "format": "int32"
+          }
+        },
+        "description": "Текущая погода в точке с указанными координатами: температура, ветер, облачность,\nосадки и время восхода/заката.\n\nЕдиницы измерения во всём ответе метрические: температура в градусах Цельсия,\nскорость ветра в метрах в секунду, давление в гектопаскалях. Текстовые описания\nприходят на русском языке."
+      },
+      "Wind": {
+        "type": "object",
+        "properties": {
+          "speed": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Скорость ветра в метрах в секунду.",
+            "format": "double"
+          },
+          "deg": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Направление, ОТКУДА дует ветер, в градусах по часовой стрелке от севера:\n0 — северный, 90 — восточный, 180 — южный, 270 — западный.",
+            "format": "int32"
+          },
+          "gust": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Скорость порывов в метрах в секунду. null — если порывов нет или они не измерялись.",
+            "format": "double"
+          }
+        },
+        "description": "Характеристики ветра."
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyBearer": {
+        "type": "http",
+        "description": "API-ключ передаётся в заголовке `Authorization: Bearer ak_…`.\n\nКлючи создаются в личном кабинете: https://atlorium.com/Account/Manage/ApiKeys\n\nЧтобы попробовать без регистрации и без списаний, вставьте демо-ключ\n`ak_sandbox_demo_mockdata_v1` — он возвращает моковые данные и помечает ответ\nзаголовком `X-Atlorium-Sandbox: true`.",
+        "scheme": "bearer",
+        "bearerFormat": "ak_…"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "API погодных данных",
+      "description": "Документация для API по получению погодных данных.",
+      "externalDocs": {
+        "description": "Попробовать в веб-интерфейсе",
+        "url": "https://atlorium.com/wGUI"
+      }
+    }
+  ],
+  "externalDocs": {
+    "description": "Описание сервиса, примеры и границы применимости",
+    "url": "https://atlorium.com/wDescription"
+  }
+}

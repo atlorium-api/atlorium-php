@@ -1,0 +1,660 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "AI Chat API",
+    "description": "AI Chat API documentation. Send messages, manage sessions, select models.\n\n### Authorization\n\nEvery method requires an API key in the request header:\n\n```\nAuthorization: Bearer ak_your_key\n```\n\nKeys are created in your account, section [API keys](https://atlorium.com/Account/Manage/ApiKeys).\nThe API has no guest access: a request without a key returns 401.\n\n### Sandbox\n\nThe key `ak_sandbox_demo_mockdata_v1` works without registration and is never charged — it\nreturns realistic demo data and marks the response with the `X-Atlorium-Sandbox: true` header.\nUse it to validate your response parsing before plugging in a real key.\n\n### Billing\n\nCredits are charged **only for a successful response**. Rejections (400, 401, 402, 429, 5xx)\nare never charged. Prices and free quotas are on the [pricing page](https://atlorium.com/pricing);\nthe balance is topped up in your [account](https://atlorium.com/Account/Manage/Billing).\n\n### Errors\n\nEvery rejection returns **the same JSON structure** — see the `ApiError` schema at the bottom\nof this page. There is no need to parse a different shape per status code: the machine-readable\nreason always lives in the `error` field.\n\n### Useful links\n\n* [Service overview](https://atlorium.com/aiDescription) — what it does, where the data comes from, what it does not cover\n* [Web interface](https://atlorium.com/aiGUI) — the same lookups by hand, no key required\n* [Pricing and limits](https://atlorium.com/pricing)\n* [Account: API keys](https://atlorium.com/Account/Manage/ApiKeys)\n* [Account: balance and payments](https://atlorium.com/Account/Manage/Billing)\n* [Blog](https://atlorium.com/blog)\n* [Report a problem](https://atlorium.com/bug-report) · [support@atlorium.com](mailto:support@atlorium.com)\n* [Terms of Service](https://atlorium.com/terms-of-service) · [Privacy policy](https://atlorium.com/privacy-policy)",
+    "termsOfService": "https://atlorium.com/terms-of-service",
+    "contact": {
+      "name": "Atlorium",
+      "url": "https://atlorium.com/bug-report",
+      "email": "support@atlorium.com"
+    },
+    "license": {
+      "name": "Proprietary — see Terms of Service",
+      "url": "https://atlorium.com/terms-of-service"
+    },
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Current server"
+    }
+  ],
+  "paths": {
+    "/api/AiChat/send": {
+      "post": {
+        "tags": [
+          "AI Chat API"
+        ],
+        "summary": "Sends a message to AI and receives a response.\nAutomatically creates a new session or continues an existing one.",
+        "description": "Example request:\nPOST /api/aichat/send\nContent-Type: application/json\n\n{\n  \"message\": \"What is DNS?\",\n  \"sessionId\": null\n}\n\nTo continue the conversation, pass the sessionId from the previous response:\n{\n  \"message\": \"How does DNSSEC work?\",\n  \"sessionId\": \"abc123def456\"\n}\n\nLimitations:\n- Message length is capped in tokens and depends on the model (see maxInputTokens in GET /api/aichat/models)\n- Maximum 50 user messages per session\n- Session is deleted after 1 hour of inactivity\n- The model field accepts only models listed in GET /api/aichat/models; an arbitrary name returns 400\n\nBILLING has TWO components:\n1) a per-request fee — fixed, identical for every model;\n2) the token cost of the selected model — depends on the model and on conversation length.\n   For free models it is zero, so you only pay the per-request fee. Per-model token\n   prices are exposed in GET /api/aichat/models (inputPricePer1kTokens, outputPricePer1kTokens)\n   and on the pricing page.\n\nThe response returns the tokens actually consumed (promptTokens/completionTokens) —\nthe second component is calculated from them.\n\nIMPORTANT — BALANCE: before calling the model we temporarily hold the maximum possible\ncost of the request (full input + longest possible answer), then charge only what was\nactually consumed; the unused part of the hold is released immediately. So a request to\nan expensive model requires that maximum to be available, even if the final charge is\nlower. If the balance cannot cover the hold, 402 Payment Required is returned.\n\nRESPONSE TIME: the reply is delivered as a whole, not streamed, and the model reasons before\nanswering. A short reply takes seconds; a detailed reply from the flagship model can take\nseveral minutes. Set your HTTP client timeout to at least 10 minutes: if the client drops the\nconnection earlier, the model still finishes the reply and the request is charged as completed.\nOnly failures are free of charge: the model did not answer within 10 minutes, or returned a\nreply with no text (spent its whole answer limit on reasoning) — both return code 500.",
+        "requestBody": {
+          "description": "Request object with the user's message.\n\nFields:\n- message (required): User message text (up to 4000 characters)\n- sessionId (optional): Existing session identifier to continue the conversation.\n  If not specified — a new session is created.\n- model (optional): AI model identifier from the available list (GET /api/aichat/models).\n  If not specified — the default model is used.\n\nExample request body:\n{\n  \"message\": \"Hello! Tell me about yourself.\",\n  \"sessionId\": null,\n  \"model\": \"fast\"\n}",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiChatRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiChatRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response. Returns the AI reply with session identifier and token usage statistics.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiChatResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiChatResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiChatResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters:\n- Message is empty or missing\n- Message exceeds the selected model's token limit\n- The requested model is not in the GET /api/aichat/models list\n- Session message limit reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The selected model is temporarily unavailable. Pick another one from GET /api/aichat/models.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "maintenance",
+                  "title": "Проводятся плановые работы",
+                  "message": "Выполнение запросов временно приостановлено на время плановых работ. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API key is missing, expired, or invalid.\nAdd the request header: Authorization: Bearer {api_key}",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Insufficient credits to process the request.\nTop up balance at: /Account/Manage/Billing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded: daily or per-minute quota for this service has been exhausted.\nRetry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "in 42 seconds"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error processing the request:\n- Failed to connect to the AI service\n- Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "server_error",
+                  "title": "Сервис временно недоступен",
+                  "message": "Запрос не может быть обработан прямо сейчас. Повторите попытку через несколько минут. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/AiChat/session/{sessionId}": {
+      "get": {
+        "tags": [
+          "AI Chat API"
+        ],
+        "summary": "Retrieves information about a chat session by its identifier.\nReturns message count, creation time, and last activity time.",
+        "description": "Example request:\nGET /api/aichat/session/abc123def456789012345678abcdef00\n\nSessions are persisted and automatically deleted after 1 hour of inactivity.",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "description": "Unique chat session identifier.\n\nFormat: 32 hexadecimal character string (GUID without dashes).\n\nExample: abc123def456789012345678abcdef00\n\nThe identifier is returned in the SendMessage response when a new session is created.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response. Returns chat session information.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiChatSession"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiChatSession"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiChatSession"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters:\n- sessionId is not specified or empty",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found:\n- Session with the specified identifier does not exist\n- Session was deleted due to timeout or manually",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "not_found",
+                  "title": "Ничего не найдено",
+                  "message": "По запросу «GET /api/…» данных нет. Если сомневаетесь в адресе метода — сверьтесь со спецификацией: /openapi/{идентификатор_сервиса}_ru.json.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "AI Chat API"
+        ],
+        "summary": "Deletes a chat session and all message history.\nAfter deletion, the session cannot be recovered.",
+        "description": "Example request:\nDELETE /api/aichat/session/abc123def456789012345678abcdef00\n\nAfter deletion, all session messages are permanently removed.\nSending a message with the same sessionId again will create a new empty session.",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "description": "Unique chat session identifier to delete.\n\nFormat: 32 hexadecimal character string (GUID without dashes).\n\nExample: abc123def456789012345678abcdef00",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response. Session deleted.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters:\n- sessionId is not specified or empty",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found:\n- Session with the specified identifier does not exist or has already been deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "not_found",
+                  "title": "Ничего не найдено",
+                  "message": "По запросу «GET /api/…» данных нет. Если сомневаетесь в адресе метода — сверьтесь со спецификацией: /openapi/{идентификатор_сервиса}_ru.json.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/AiChat/models": {
+      "get": {
+        "tags": [
+          "AI Chat API"
+        ],
+        "summary": "Returns the list of available AI models.\nEach model has a unique identifier, name, description, and token limit.",
+        "description": "Example request:\nGET /api/aichat/models\n\nThe model list may change over time. This endpoint is free and is not billed — only\nPOST /api/aichat/send is. To use a specific model, pass its id in the model field of\nthe send-message request.\n\nThe cost of a request to /api/aichat/send has two components: a fixed per-request fee\n(identical for every model) and the token cost of the selected model — which DIFFERS\nbetween models (inputPricePer1kTokens/outputPricePer1kTokens below, zero for free\nmodels). See the POST /api/aichat/send description for details.",
+        "responses": {
+          "200": {
+            "description": "Successful response. Returns an array of available AI models.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AiModelInfo"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AiModelInfo"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AiModelInfo"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AiChatRequest": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Текст сообщения пользователя (обязательное поле; длина ограничена в зависимости от выбранной модели)."
+          },
+          "sessionId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Идентификатор существующей сессии для продолжения диалога.\nЕсли null — сервис автоматически создаст новую сессию."
+          },
+          "model": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Идентификатор или алиас ИИ модели для обработки запроса.\nЕсли null — используется модель по умолчанию из конфигурации сервера.\nСписок доступных моделей можно получить через GET /api/aichat/models."
+          }
+        },
+        "description": "Запрос на отправку сообщения в ИИ чат.\nПользователь передаёт текст сообщения, опционально — идентификатор сессии\nдля продолжения диалога и идентификатор (или алиас) модели."
+      },
+      "AiChatResponse": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "description": "Идентификатор сессии — сохраните его для продолжения диалога."
+          },
+          "reply": {
+            "type": "string",
+            "description": "Текст ответа ИИ модели."
+          },
+          "model": {
+            "type": "string",
+            "description": "Идентификатор (или алиас) использованной модели."
+          },
+          "promptTokens": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество токенов, потраченных на промт (входные данные).",
+            "format": "int32"
+          },
+          "completionTokens": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество токенов, потраченных на генерацию ответа.",
+            "format": "int32"
+          },
+          "totalTokens": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Общее количество использованных токенов (prompt + completion).",
+            "format": "int32"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "Время создания ответа в формате UTC.",
+            "format": "date-time"
+          }
+        },
+        "description": "Ответ от ИИ чата. Содержит текст ответа модели, идентификатор сессии\nдля продолжения диалога и статистику использования токенов."
+      },
+      "AiChatSession": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "description": "Уникальный идентификатор сессии."
+          },
+          "messageCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество сообщений пользователя в сессии (без ответов ИИ).",
+            "format": "int32"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "Время создания сессии (UTC).",
+            "format": "date-time"
+          },
+          "lastActivityAt": {
+            "type": "string",
+            "description": "Время последней активности в сессии (UTC).",
+            "format": "date-time"
+          }
+        },
+        "description": "Информация о сессии чата. Возвращается при запросе GET /api/aichat/session/{id}.\nСодержит метаданные сессии без самих сообщений."
+      },
+      "AiModelInfo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Идентификатор модели — его и нужно передавать в поле model запроса.\nВыглядит как короткое имя вида \"fast\" либо как полное имя модели."
+          },
+          "name": {
+            "type": "string",
+            "description": "Человекочитаемое название модели."
+          },
+          "description": {
+            "type": "string",
+            "description": "Описание возможностей и особенностей модели."
+          },
+          "contextWindowTokens": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Полное контекстное окно модели в токенах (вход + история + ответ).\nСправочное поле — например, у Gemini это может быть 1 000 000. НЕ путать\nс maxInputTokens: в одно сообщение влезает только его доля.",
+            "format": "int32"
+          },
+          "maxInputTokens": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Лимит на ввод ОДНОГО сообщения пользователя в токенах. Это «живое»\nограничение, по которому запрос и отклоняется: сообщение длиннее лимита\nполучает 400. Значение заметно меньше contextWindowTokens —\nв окне модели должно остаться место под историю диалога и сам ответ.",
+            "format": "int32"
+          },
+          "maxOutputTokens": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Потолок длины ответа модели в токенах (уходит в max_tokens запроса).",
+            "format": "int32"
+          },
+          "maxTokens": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Устаревшее поле: дублирует contextWindowTokens и оставлено для\nсовместимости. В новых интеграциях используйте contextWindowTokens\nи maxInputTokens.",
+            "format": "int32"
+          },
+          "inputPricePer1kTokens": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Цена ВХОДНЫХ токенов модели — в кредитах за 1000 токенов. Это ВТОРАЯ составляющая цены\nИИ-запроса: первая (базовая ставка за сам запрос) едина для всех моделей и живёт в\nпрайс-листе сервиса. 0 — модель бесплатна по токенам, клиент платит только за запрос.",
+            "format": "double"
+          },
+          "outputPricePer1kTokens": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Цена ВЫХОДНЫХ токенов (ответа модели) — в кредитах за 1000 токенов.\nСм. inputPricePer1kTokens.",
+            "format": "double"
+          },
+          "freeQuotaEligible": {
+            "type": "boolean",
+            "description": "Действует ли на эту модель бесплатная дневная квота. Квота гасит только базовую ставку\nза запрос, поэтому имеет смысл лишь у моделей с бесплатными токенами: для них запрос\nпо квоте бесплатен ЦЕЛИКОМ. У платных моделей — false (оплата с первого запроса)."
+          },
+          "isAvailable": {
+            "type": "boolean",
+            "description": "Доступна ли модель для запросов. При false модель числится в каталоге, но\nобращения к ней отклоняются: она готовится к запуску. Поле стоит учитывать, чтобы\nне предлагать пользователю выбор, который заведомо не сработает."
+          },
+          "isLocal": {
+            "type": "boolean",
+            "description": "Модель размещена на собственных серверах сервиса. Практический смысл один и\nважный: содержимое диалога с такой моделью не передаётся третьим лицам."
+          }
+        },
+        "description": "Описание одной доступной ИИ-модели: идентификатор для запросов, лимиты по токенам\nи цена токенов."
+      },
+      "ApiError": {
+        "title": "API error",
+        "required": [
+          "error",
+          "title",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Machine-readable reason code. Possible values:\n\n* `server_error` (500) — Сервис временно недоступен\n* `unauthorized` (401) — Требуется вход\n* `api_key_required` (401) — Нужен API-ключ\n* `account_not_activated` (402) — Аккаунт не активирован\n* `rate_limited_client` (429) — Слишком много запросов\n* `rate_limited_global` (429) — Высокая нагрузка на сервис\n* `provider_keys_exhausted` (429) — Сервис временно недоступен\n* `insufficient_credits` (402) — Недостаточно кредитов\n* `guest_quota_exhausted` (402) — Бесплатный лимит на сегодня исчерпан\n* `service_disabled` (503) — Проводятся плановые работы\n* `maintenance` (503) — Проводятся плановые работы\n* `guest_not_allowed` (402) — Нужна регистрация\n* `service_not_in_account_terms` (403) — Сервис не подключён\n* `bad_request` (400) — Некорректный запрос\n* `forbidden` (403) — Доступ запрещён\n* `not_found` (404) — Ничего не найдено\n* `method_not_allowed` (405) — Метод HTTP не поддерживается\n* `unsupported_media_type` (415) — Формат запроса не поддерживается\n* `not_implemented` (501) — Режим пока не реализован",
+            "example": "insufficient_credits"
+          },
+          "title": {
+            "type": "string",
+            "description": "Short title for a user interface.",
+            "example": "Insufficient credits"
+          },
+          "message": {
+            "type": "string",
+            "description": "Detailed explanation: what happened and what to do about it. Shown to the user as is."
+          },
+          "balance": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Current balance in credits. Filled in on 402 so that no extra balance request is needed; null otherwise."
+          },
+          "retryAfterSeconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "How many seconds to wait before retrying. Mirrors the Retry-After HTTP header. null when retrying will not help (for example, out of credits)."
+          },
+          "retryAfterText": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The same delay as a ready-to-show phrase. Saves clients from formatting it themselves."
+          }
+        },
+        "description": "A single response body for every rejection: validation errors, a missing key, an exhausted limit. Branch on the `error` field — it is a stable machine-readable code. `title` and `message` are meant for humans and their wording may change."
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyBearer": {
+        "type": "http",
+        "description": "The API key goes into the `Authorization: Bearer ak_…` header.\n\nKeys are created in your account: https://atlorium.com/Account/Manage/ApiKeys\n\nTo try it without registration and without being charged, use the demo key\n`ak_sandbox_demo_mockdata_v1` — it returns mock data and marks the response with\nthe `X-Atlorium-Sandbox: true` header.",
+        "scheme": "bearer",
+        "bearerFormat": "ak_…"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "AI Chat API",
+      "description": "AI Chat API documentation. Send messages, manage sessions, select models.",
+      "externalDocs": {
+        "description": "Try it in the web interface",
+        "url": "https://atlorium.com/aiGUI"
+      }
+    }
+  ],
+  "externalDocs": {
+    "description": "Service overview, examples and limitations",
+    "url": "https://atlorium.com/aiDescription"
+  }
+}

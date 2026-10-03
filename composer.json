@@ -1,0 +1,81 @@
+{
+    "name": "atlorium/atlorium",
+    "description": "Официальный PHP SDK Atlorium: ЕГРЮЛ/ЕГРИП, БИК ЦБ, SWIFT, BIN, ГАР/ФИАС, геокодинг, OCR, модерация изображений и ещё 15 B2B API для российского рынка. Работает без Composer (1С-Битрикс), PHP 7.4+.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "atlorium",
+        "api",
+        "sdk",
+        "egrul",
+        "егрюл",
+        "inn",
+        "инн",
+        "bik",
+        "бик",
+        "swift",
+        "fias",
+        "фиас",
+        "gar",
+        "geocoding",
+        "ocr",
+        "bitrix",
+        "битрикс",
+        "counterparty-check"
+    ],
+    "homepage": "https://atlorium.com",
+    "support": {
+        "email": "support@atlorium.com",
+        "issues": "https://github.com/atlorium-api/atlorium-php/issues",
+        "source": "https://github.com/atlorium-api/atlorium-php",
+        "docs": "https://github.com/atlorium-api/atlorium-php#readme"
+    },
+    "authors": [
+        {
+            "name": "Atlorium",
+            "email": "support@atlorium.com",
+            "homepage": "https://atlorium.com"
+        }
+    ],
+    "require": {
+        "php": "^7.4 || ^8.0",
+        "ext-curl": "*",
+        "ext-json": "*"
+    },
+    "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3.40",
+        "nyholm/psr7": "^1.8",
+        "phpstan/phpstan": "^2.1",
+        "phpunit/phpunit": "^9.6.25",
+        "psr/http-client": "^1.0",
+        "psr/http-factory": "^1.0",
+        "psr/http-message": "^1.1 || ^2.0"
+    },
+    "suggest": {
+        "psr/http-client": "Чтобы передать свой PSR-18 HTTP-клиент (Guzzle, Symfony HttpClient) вместо встроенного cURL",
+        "psr/http-factory": "Нужен вместе с PSR-18 клиентом: фабрики запросов и потоков (PSR-17)"
+    },
+    "autoload": {
+        "psr-4": {
+            "Atlorium\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Atlorium\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "analyse": "phpstan analyse --memory-limit=1G",
+        "cs": "php-cs-fixer fix --dry-run --diff",
+        "cs-fix": "php-cs-fixer fix",
+        "standalone": "php tests/standalone.php",
+        "generate": "python scripts/generate.py"
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

@@ -1,0 +1,1125 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "API справочника SWIFT/BIC",
+    "description": "Документация для API справочника SWIFT/BIC (поиск по BIC и названию, валидация формата BIC).\n\n### Авторизация\n\nВсе методы требуют API-ключ в заголовке запроса:\n\n```\nAuthorization: Bearer ak_ваш_ключ\n```\n\nКлючи создаются в личном кабинете, раздел [API-ключи](https://atlorium.com/Account/Manage/ApiKeys).\nГостевого доступа у API нет: запрос без ключа получает 401.\n\n### Песочница\n\nКлюч `ak_sandbox_demo_mockdata_v1` работает без регистрации и без списаний — возвращает\nправдоподобные демо-данные и помечает ответ заголовком `X-Atlorium-Sandbox: true`.\nУдобно проверить разбор ответа до подключения настоящего ключа.\n\n### Тарификация\n\nКредиты списываются **только за успешный ответ**. Отказы (400, 401, 402, 429, 5xx)\nне тарифицируются. Цены и бесплатные квоты — на странице [тарифов](https://atlorium.com/pricing),\nбаланс пополняется в [личном кабинете](https://atlorium.com/Account/Manage/Billing).\n\n### Ошибки\n\nЛюбой отказ возвращает **одну и ту же структуру** JSON — схема `ApiError` внизу страницы.\nРазбирать разные форматы под разные коды не нужно: машинный код причины всегда лежит\nв поле `error`.\n\n### Полезные ссылки\n\n* [Описание сервиса](https://atlorium.com/swiftDescription) — что умеет, откуда данные, где границы применимости\n* [Веб-интерфейс](https://atlorium.com/swiftGUI) — те же расчёты руками, без ключа\n* [Тарифы и лимиты](https://atlorium.com/pricing)\n* [Личный кабинет: API-ключи](https://atlorium.com/Account/Manage/ApiKeys)\n* [Личный кабинет: баланс и платежи](https://atlorium.com/Account/Manage/Billing)\n* [Блог](https://atlorium.com/blog) — разборы задач и примеры интеграции\n* [Сообщить о проблеме](https://atlorium.com/bug-report) · [support@atlorium.com](mailto:support@atlorium.com)\n* [Оферта](https://atlorium.com/terms-of-service) · [Политика обработки информации](https://atlorium.com/privacy-policy)",
+    "termsOfService": "https://atlorium.com/terms-of-service",
+    "contact": {
+      "name": "Atlorium",
+      "url": "https://atlorium.com/bug-report",
+      "email": "support@atlorium.com"
+    },
+    "license": {
+      "name": "Проприетарная — использование по оферте",
+      "url": "https://atlorium.com/terms-of-service"
+    },
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Текущий сервер (адрес берётся из строки браузера)"
+    }
+  ],
+  "paths": {
+    "/api/Swift/{bic}": {
+      "get": {
+        "tags": [
+          "API справочника SWIFT/BIC"
+        ],
+        "summary": "Возвращает карточку организации по точному SWIFT/BIC (8 или 11 символов).",
+        "description": "Пример запроса:\nGET /api/swift/DEUTDEFF",
+        "parameters": [
+          {
+            "name": "bic",
+            "in": "path",
+            "description": "SWIFT/BIC-код. 8-значный (головной офис) дополняется до 11 (\"XXX\"). Пример: DEUTDEFF.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ. Возвращает карточку организации.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SwiftBankInfo"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SwiftBankInfo"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SwiftBankInfo"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BIC не указан или имеет неверный формат (ISO-9362).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Организация с указанным BIC не найдена в справочнике.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "not_found",
+                  "title": "Ничего не найдено",
+                  "message": "По запросу «GET /api/…» данных нет. Если сомневаетесь в адресе метода — сверьтесь со спецификацией: /openapi/{идентификатор_сервиса}_ru.json.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API-ключ отсутствует, просрочен или недействителен.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Недостаточно кредитов на балансе для выполнения запроса.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Превышен rate-limit. Повторите запрос позже.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "через 42 секунды"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Справочник SWIFT/BIC временно недоступен.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "maintenance",
+                  "title": "Проводятся плановые работы",
+                  "message": "Выполнение запросов временно приостановлено на время плановых работ. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/Swift/search": {
+      "get": {
+        "tags": [
+          "API справочника SWIFT/BIC"
+        ],
+        "summary": "Ищет организации по наименованию (полнотекстовый поиск).",
+        "description": "Примеры запросов:\nGET /api/swift/search?query=Sberbank\nGET /api/swift/search?query=Deutsche%20Bank&limit=50",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "description": "Строка поиска — часть наименования организации. Пример: Sberbank.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Максимум результатов (по умолчанию 20, максимум 100).",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ. Возвращает найденные организации.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SwiftSearchResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SwiftSearchResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SwiftSearchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Параметр query не указан или пустой.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API-ключ отсутствует, просрочен или недействителен.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Недостаточно кредитов на балансе для выполнения запроса.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Превышен rate-limit. Повторите запрос позже.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "через 42 секунды"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Справочник SWIFT/BIC временно недоступен.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "maintenance",
+                  "title": "Проводятся плановые работы",
+                  "message": "Выполнение запросов временно приостановлено на время плановых работ. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/Swift/validate/{bic}": {
+      "get": {
+        "tags": [
+          "API справочника SWIFT/BIC"
+        ],
+        "summary": "Проверяет формат SWIFT/BIC по стандарту ISO-9362 и разбирает его на части, мгновенно.\nПроверяет только формат, а не существование такого кода.",
+        "description": "Пример запроса:\nGET /api/swift/validate/DEUTDEFFXXX",
+        "parameters": [
+          {
+            "name": "bic",
+            "in": "path",
+            "description": "Проверяемый BIC (8 или 11 символов).",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Результат проверки формата (valid + разбор на части).",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SwiftBicValidationResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SwiftBicValidationResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SwiftBicValidationResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BIC не указан.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API-ключ отсутствует, просрочен или недействителен.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Недостаточно кредитов на балансе для выполнения запроса.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Превышен rate-limit. Повторите запрос позже.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "через 42 секунды"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/Swift/stats": {
+      "get": {
+        "tags": [
+          "API справочника SWIFT/BIC"
+        ],
+        "summary": "Возвращает служебную информацию сервиса: готовность отвечать на запросы.",
+        "description": "Пример запроса:\nGET /api/swift/stats",
+        "responses": {
+          "200": {
+            "description": "Инфо о сервисе справочника SWIFT/BIC.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SwiftStatsResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SwiftStatsResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SwiftStatsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API-ключ отсутствует, просрочен или недействителен.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Недостаточно кредитов на балансе для выполнения запроса.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Превышен rate-limit. Повторите запрос позже.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "через 42 секунды"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "title": "Ошибка API",
+        "required": [
+          "error",
+          "title",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Машинный код причины отказа. Возможные значения:\n\n* `server_error` (500) — Сервис временно недоступен\n* `unauthorized` (401) — Требуется вход\n* `api_key_required` (401) — Нужен API-ключ\n* `account_not_activated` (402) — Аккаунт не активирован\n* `rate_limited_client` (429) — Слишком много запросов\n* `rate_limited_global` (429) — Высокая нагрузка на сервис\n* `provider_keys_exhausted` (429) — Сервис временно недоступен\n* `insufficient_credits` (402) — Недостаточно кредитов\n* `guest_quota_exhausted` (402) — Бесплатный лимит на сегодня исчерпан\n* `service_disabled` (503) — Проводятся плановые работы\n* `maintenance` (503) — Проводятся плановые работы\n* `guest_not_allowed` (402) — Нужна регистрация\n* `service_not_in_account_terms` (403) — Сервис не подключён\n* `bad_request` (400) — Некорректный запрос\n* `forbidden` (403) — Доступ запрещён\n* `not_found` (404) — Ничего не найдено\n* `method_not_allowed` (405) — Метод HTTP не поддерживается\n* `unsupported_media_type` (415) — Формат запроса не поддерживается\n* `not_implemented` (501) — Режим пока не реализован",
+            "example": "insufficient_credits"
+          },
+          "title": {
+            "type": "string",
+            "description": "Короткий заголовок для интерфейса.",
+            "example": "Недостаточно кредитов"
+          },
+          "message": {
+            "type": "string",
+            "description": "Подробное объяснение: что произошло и что с этим делать. Показывается пользователю целиком."
+          },
+          "balance": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Текущий баланс в кредитах. Заполняется при 402, чтобы не делать отдельный запрос за балансом; в остальных случаях null."
+          },
+          "retryAfterSeconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Через сколько секунд имеет смысл повторить запрос. Дублирует HTTP-заголовок Retry-After. null — если повтор не поможет (например, кончились кредиты)."
+          },
+          "retryAfterText": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Та же задержка готовой фразой — «через 2 мин 30 с». Чтобы клиентам не приходилось самим склонять минуты и секунды."
+          }
+        },
+        "description": "Единое тело ответа для любого отказа: и для ошибки валидации, и для отсутствующего ключа, и для исчерпанного лимита. Ветвиться в коде следует по полю `error` — это стабильный машинный код. Поля `title` и `message` предназначены человеку, их формулировки могут меняться."
+      },
+      "SwiftAddress": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Улица/дом/корпус — все содержательные строки адреса, объединённые через запятую."
+          },
+          "city": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Город."
+          },
+          "region": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Регион/субъект (например, \"DE-HE\")."
+          },
+          "country": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Код страны в формате ISO-3166 alpha-2 (например, \"DE\")."
+          },
+          "postalCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Почтовый индекс."
+          },
+          "addressNumber": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Номер дома/строения (поле addressNumber). Заполняется редко; null, если нет."
+          },
+          "addressNumberWithinBuilding": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Номер помещения/офиса внутри здания (поле addressNumberWithinBuilding). null, если нет."
+          },
+          "mailRouting": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Готовая почтовая строка для конвертов: индекс, город и адрес одной строкой.\nЗаполняется не всегда; null, если строка недоступна."
+          },
+          "language": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Язык адреса (ISO-639, например \"ru\"/\"en\"). Полезно для адресов на других языках\n(см. otherAddresses). null для основного адреса."
+          },
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Тип адреса для альтернативных адресов: например \"ALTERNATIVE_LANGUAGE_LEGAL_ADDRESS\" —\nюридический адрес на другом языке, \"...HEADQUARTERS_ADDRESS\" — адрес штаб-квартиры на другом языке.\nnull для основного юр. адреса/адреса штаб-квартиры."
+          }
+        },
+        "description": "Почтовый адрес организации в структурированном виде. Используется для адресов, вынесенных\nотдельным блоком (например, адрес штаб-квартиры). Любое поле может быть null: в справочнике\nадрес заполнен не всегда полностью."
+      },
+      "SwiftBankInfo": {
+        "type": "object",
+        "properties": {
+          "bic": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Основной SWIFT/BIC-код организации (8 или 11 символов). При точечном поиске по BIC сюда\nпопадает запрошенный код; при поиске по названию — первый из кодов организации (или null,\nесли у организации в справочнике нет ни одного привязанного SWIFT/BIC)."
+          },
+          "lei": {
+            "type": "string",
+            "description": "LEI — Legal Entity Identifier, 20-значный международный идентификатор юридического лица\n(стандарт ISO 17442). Уникален для организации и удобен как «сквозной» ключ при сверке\nконтрагентов между разными системами."
+          },
+          "name": {
+            "type": "string",
+            "description": "Юридическое наименование организации."
+          },
+          "otherNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Прочие наименования организации: торговые марки, сокращённые названия, написания на других\nязыках/в другой транслитерации. Пусто, если у организации зарегистрировано только одно имя.\nПолезно при сверке контрагента, который в платёжке указан не «официальным» именем."
+          },
+          "country": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Код страны юридического адреса в формате ISO-3166 alpha-2 (например, \"DE\", \"RU\")."
+          },
+          "jurisdiction": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Код юрисдикции регистрации организации (ISO-3166, например \"DE\" или субкод вида \"US-DE\").\nОбычно совпадает со страной адреса, но не всегда — поэтому возвращается отдельным полем."
+          },
+          "entityCategory": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Категория организации: например \"GENERAL\" — обычное юр. лицо, \"FUND\" — фонд,\n\"BRANCH\" — филиал, \"SOLE_PROPRIETOR\" — ИП. Возвращается в исходном виде справочника."
+          },
+          "entitySubCategory": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Подкатегория организации (поле subCategory): уточняет категорию для отдельных типов\n(например, виды фондов). Заполняется редко; null, если не указана."
+          },
+          "legalForm": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Код организационно-правовой формы (ELF — Entity Legal Form, стандарт ISO 20275; например\n\"6QQB\" для немецкой AG). Это машинный код формы; null, если форма не указана."
+          },
+          "city": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Город юридического адреса."
+          },
+          "region": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Регион/субъект юридического адреса (например, \"DE-HE\" — Гессен)."
+          },
+          "postalCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Почтовый индекс юридического адреса."
+          },
+          "address": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Юридический адрес одной строкой — все содержательные строки адреса (улица, дом, корпус),\nобъединённые через запятую. Город/регион/индекс/страна вынесены в отдельные поля."
+          },
+          "headquarters": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SwiftAddress"
+              }
+            ],
+            "description": "Адрес штаб-квартиры (фактического головного офиса). Часто совпадает с юридическим адресом,\nно у международных групп может отличаться, поэтому возвращается отдельной структурой.\nnull, если штаб-квартира не указана."
+          },
+          "registrationAuthorityId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Идентификатор регистрирующего органа, в котором организация внесена в реестр (код вида\n\"RA000242\" — например, для Германии это торговый реестр Handelsregister). null, если не указан."
+          },
+          "registrationId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Регистрационный номер организации в этом органе (например, \"HRB 30000\" — номер в немецком\nторговом реестре). Это локальный номер юр. лица в его стране, аналог ОГРН для РФ. null, если нет."
+          },
+          "entityCreationDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Дата создания (учреждения) юридического лица (UTC). null, если неизвестна.",
+            "format": "date-time"
+          },
+          "entityExpirationDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Дата прекращения существования организации (UTC). null — организация не прекращена/неизвестно.",
+            "format": "date-time"
+          },
+          "entityExpirationReason": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Причина прекращения существования (поле expiration.reason): например \"DISSOLVED\" —\nликвидирована, \"CORPORATE_ACTION\" — реорганизация. null, если организация не прекращена."
+          },
+          "associatedEntityLei": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "LEI ассоциированной организации (поле associatedEntity.lei): для фондов — управляющая компания\nи т.п. null, если ассоциированной организации нет."
+          },
+          "associatedEntityName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Наименование ассоциированной организации (associatedEntity.name). См. associatedEntityLei."
+          },
+          "entityStatus": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Статус юридического лица: \"ACTIVE\" — действует, \"INACTIVE\" — ликвидировано/присоединено.\nПозволяет потребителю отличать действующие организации от прекративших существование."
+          },
+          "registrationStatus": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Статус актуальности регистрационной записи: \"ISSUED\" — актуальна и подтверждена,\n\"LAPSED\" — не продлевалась (данные могли устареть), \"RETIRED\"/\"MERGED\" — закрыта.\nВозвращается в исходном виде справочника — по нему оценивают свежесть регистрационных сведений."
+          },
+          "lastUpdate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Дата последнего обновления регистрационной записи (UTC). null, если неизвестна.",
+            "format": "date-time"
+          },
+          "initialRegistrationDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Дата первичной регистрации записи об организации в реестре (UTC). null, если неизвестна.",
+            "format": "date-time"
+          },
+          "nextRenewalDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Дата, до которой запись подтверждена и подлежит следующему продлению (UTC). Если она в прошлом,\nа статус не \"ISSUED\" — данные могли устареть (организация не продлевала регистрацию). null, если нет.",
+            "format": "date-time"
+          },
+          "managingLou": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Идентификатор организации, которая ведёт (поддерживает) эту регистрационную запись —\n20-значный код по тому же стандарту, что и LEI. Технический реквизит регистрационной записи."
+          },
+          "corroborationLevel": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Уровень подтверждённости данных записи: \"FULLY_CORROBORATED\" — полностью сверены с официальным\nреестром, \"PARTIALLY_CORROBORATED\"/\"ENTITY_SUPPLIED_ONLY\" — подтверждены частично/со слов организации.\nПомогает оценить степень доверия к карточке. Возвращается в исходном виде справочника."
+          },
+          "validationAuthorityId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Идентификатор органа, по данным которого ПОДТВЕРЖДАЛАСЬ запись (validatedAt.id). Обычно совпадает\nс registrationAuthorityId, но может отличаться. null, если не указан."
+          },
+          "validationId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Номер организации в органе подтверждения (validatedAs). См. validationAuthorityId."
+          },
+          "conformityFlag": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Признак соответствия записи политике качества данных (conformityFlag): \"CONFORMING\" —\nсоответствует, \"NON_CONFORMING\" — нет. null, если не указан."
+          },
+          "qualityCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Служебный код качества регистрационной записи. Технический реквизит. null, если нет."
+          },
+          "legalEvents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SwiftLegalEvent"
+            },
+            "description": "История юридических событий организации (слияния, смена адреса/наименования и т.п.) из блока\neventGroups. Пусто, если событий нет. Позволяет проследить значимые изменения по датам."
+          },
+          "mailRouting": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Готовая почтовая строка юридического адреса (поле mailRouting): индекс, город и адрес одной\nстрокой, как принято в стране организации. Например: \"117997, г. Москва, ул. Вавилова, д. 19\".\nЗаполняется не всегда; null, если строка недоступна."
+          },
+          "otherAddresses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SwiftAddress"
+            },
+            "description": "Альтернативные адреса организации — прежде всего адрес на другом языке (например, английская\nверсия юр. адреса/адреса штаб-квартиры для российских организаций). У каждого адреса заполнены\ntype и language. Пусто, если их нет."
+          },
+          "successorLei": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "LEI организации-правопреемника. Заполняется, когда организация прекратила существование\n(слияние/присоединение) и её правопреемник известен. null — правопреемника нет/неизвестен."
+          },
+          "successorName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Наименование организации-правопреемника (если есть). См. successorLei."
+          },
+          "mic": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "MIC — Market Identifier Code (ISO 10383), код торговой площадки. Заполнен в основном у бирж\nи торговых систем; у обычных банков обычно null."
+          },
+          "openCorporatesId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Идентификатор организации в реестре OpenCorporates (внешняя сверка контрагентов). null, если нет."
+          },
+          "spGlobalIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Идентификаторы организации в данных S&P Global (внешняя сверка/обогащение). Пусто, если их нет."
+          },
+          "allBics": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Все SWIFT/BIC-коды, привязанные к этой организации. У международных групп их бывает много\n(отдельный код на страну/подразделение). Пустой список — у организации нет ни одного BIC."
+          }
+        },
+        "description": "Карточка одной организации из справочника SWIFT/BIC одним плоским набором полей.\nОбъединяет идентификаторы организации (SWIFT/BIC, LEI), её юридическое наименование\nи адрес, а также признаки актуальности данных.\n\n\nПример. По коду DEUTDEFF в карточке будет: Name = \"DEUTSCHE BANK\nAKTIENGESELLSCHAFT\", Country = \"DE\", City = \"Frankfurt am Main\", Lei = 20-значный код,\nEntityStatus = \"ACTIVE\", а в allBics — все BIC этой организации (у крупных\nбанков их десятки, по одному на страну/филиал)."
+      },
+      "SwiftBicValidationResult": {
+        "type": "object",
+        "properties": {
+          "normalizedBic": {
+            "type": "string",
+            "description": "Нормализованный код (верхний регистр, без пробелов; 8-значный дополнен \"XXX\")."
+          },
+          "isValidFormat": {
+            "type": "boolean",
+            "description": "true, если строка соответствует формату ISO-9362 (длина и наборы символов по позициям)."
+          },
+          "message": {
+            "type": "string",
+            "description": "Понятное человеку пояснение результата (что именно не так с форматом, либо «формат корректен»)."
+          },
+          "bankCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Код организации — первые 4 буквы (позиции 1–4, institution code по ISO-9362)."
+          },
+          "countryCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Код страны — позиции 5–6, буквы ISO-3166 alpha-2."
+          },
+          "locationCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Код местоположения — позиции 7–8 (буквы или цифры). Вторая цифра \"1\" обычно означает пассивного участника."
+          },
+          "branchCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Код филиала — позиции 9–11 (опционально). \"XXX\" или отсутствие означает головной офис.\nnull, если на вход пришёл 8-значный код (без явного филиала)."
+          },
+          "isPrimaryOffice": {
+            "type": "boolean",
+            "description": "true, если код относится к головному офису (филиал отсутствует или равен \"XXX\")."
+          }
+        },
+        "description": "Результат проверки формата SWIFT/BIC по стандарту ISO-9362. Считается локально, по самой\nстроке, и разбирает её на составные части. isValidFormat говорит ТОЛЬКО о\nкорректности формата, но НЕ о том, что такой код реально существует (для проверки\nсуществования есть точечный поиск по BIC).\n\n\nПример. Для \"DEUTDEFFXXX\": IsValidFormat = true, BankCode = \"DEUT\", CountryCode = \"DE\",\nLocationCode = \"FF\", BranchCode = \"XXX\", IsPrimaryOffice = true."
+      },
+      "SwiftLegalEvent": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Тип события: например \"MERGERS_AND_ACQUISITIONS\" — слияние/поглощение,\n\"CHANGE_LEGAL_ADDRESS\" — смена юр. адреса, \"CHANGE_LEGAL_NAME\" — смена наименования."
+          },
+          "status": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Статус события: например \"COMPLETED\" — завершено, \"IN_PROGRESS\" — в процессе."
+          },
+          "effectiveDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Дата вступления события в силу (UTC). null, если не указана.",
+            "format": "date-time"
+          },
+          "recordedDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Дата, когда событие зафиксировано в реестре (UTC). null, если не указана.",
+            "format": "date-time"
+          }
+        },
+        "description": "Юридическое событие в истории организации:\nслияние/поглощение, смена юридического адреса, наименования и т.п."
+      },
+      "SwiftSearchResponse": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Исходная строка запроса — возвращается без изменений."
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SwiftBankInfo"
+            },
+            "description": "Найденные организации (текущая страница ответа, не больше запрошенного limit)."
+          },
+          "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество элементов в results (на текущей странице).",
+            "format": "int32"
+          },
+          "totalMatches": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Сколько всего организаций соответствует запросу. Может быть больше count:\nв ответ кладётся лишь первая страница (limit), а здесь — полный размер совпадения.\nПо нему строится подпись вида «показано 20 из 134».",
+            "format": "int32"
+          },
+          "elapsedMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Время выполнения запроса в миллисекундах.",
+            "format": "int64"
+          }
+        },
+        "description": "Ответ на поиск по справочнику SWIFT/BIC: найденные организации и параметры запроса."
+      },
+      "SwiftStatsResponse": {
+        "type": "object",
+        "properties": {
+          "isReady": {
+            "type": "boolean",
+            "description": "Готов ли сервис отвечать на запросы (для справочника SWIFT/BIC — практически всегда true)."
+          }
+        },
+        "description": "Состояние сервиса справочника SWIFT/BIC: готов ли он отвечать на запросы."
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyBearer": {
+        "type": "http",
+        "description": "API-ключ передаётся в заголовке `Authorization: Bearer ak_…`.\n\nКлючи создаются в личном кабинете: https://atlorium.com/Account/Manage/ApiKeys\n\nЧтобы попробовать без регистрации и без списаний, вставьте демо-ключ\n`ak_sandbox_demo_mockdata_v1` — он возвращает моковые данные и помечает ответ\nзаголовком `X-Atlorium-Sandbox: true`.",
+        "scheme": "bearer",
+        "bearerFormat": "ak_…"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "API справочника SWIFT/BIC",
+      "description": "Документация для API справочника SWIFT/BIC (поиск по BIC и названию, валидация формата BIC).",
+      "externalDocs": {
+        "description": "Попробовать в веб-интерфейсе",
+        "url": "https://atlorium.com/swiftGUI"
+      }
+    }
+  ],
+  "externalDocs": {
+    "description": "Описание сервиса, примеры и границы применимости",
+    "url": "https://atlorium.com/swiftDescription"
+  }
+}

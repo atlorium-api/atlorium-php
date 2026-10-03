@@ -1,0 +1,541 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "Address Standardization API",
+    "description": "API documentation for address standardization (parsing an address string into levels, normalization and quality score).\n\n### Authorization\n\nEvery method requires an API key in the request header:\n\n```\nAuthorization: Bearer ak_your_key\n```\n\nKeys are created in your account, section [API keys](https://atlorium.com/Account/Manage/ApiKeys).\nThe API has no guest access: a request without a key returns 401.\n\n### Sandbox\n\nThe key `ak_sandbox_demo_mockdata_v1` works without registration and is never charged — it\nreturns realistic demo data and marks the response with the `X-Atlorium-Sandbox: true` header.\nUse it to validate your response parsing before plugging in a real key.\n\n### Billing\n\nCredits are charged **only for a successful response**. Rejections (400, 401, 402, 429, 5xx)\nare never charged. Prices and free quotas are on the [pricing page](https://atlorium.com/pricing);\nthe balance is topped up in your [account](https://atlorium.com/Account/Manage/Billing).\n\n### Errors\n\nEvery rejection returns **the same JSON structure** — see the `ApiError` schema at the bottom\nof this page. There is no need to parse a different shape per status code: the machine-readable\nreason always lives in the `error` field.\n\n### Useful links\n\n* [Service overview](https://atlorium.com/addressstdDescription) — what it does, where the data comes from, what it does not cover\n* [Web interface](https://atlorium.com/addressstdGUI) — the same lookups by hand, no key required\n* [Pricing and limits](https://atlorium.com/pricing)\n* [Account: API keys](https://atlorium.com/Account/Manage/ApiKeys)\n* [Account: balance and payments](https://atlorium.com/Account/Manage/Billing)\n* [Blog](https://atlorium.com/blog)\n* [Report a problem](https://atlorium.com/bug-report) · [support@atlorium.com](mailto:support@atlorium.com)\n* [Terms of Service](https://atlorium.com/terms-of-service) · [Privacy policy](https://atlorium.com/privacy-policy)",
+    "termsOfService": "https://atlorium.com/terms-of-service",
+    "contact": {
+      "name": "Atlorium",
+      "url": "https://atlorium.com/bug-report",
+      "email": "support@atlorium.com"
+    },
+    "license": {
+      "name": "Proprietary — see Terms of Service",
+      "url": "https://atlorium.com/terms-of-service"
+    },
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Current server"
+    }
+  ],
+  "paths": {
+    "/api/AddressStd": {
+      "get": {
+        "tags": [
+          "Address Standardization API"
+        ],
+        "summary": "Parses an address line into a structure: address levels, a normalized single-line form and a quality score.",
+        "description": "Example requests:\nGET /api/addressstd?address=г Москва, ул. 16-я Парковая д.2 к1 кв.3\nGET /api/addressstd?address=ленинский проспект 4&region=77",
+        "parameters": [
+          {
+            "name": "address",
+            "in": "query",
+            "description": "Address line. Examples: «мск ленинскй проспект д4 кв5»,\n«г Москва, ул. 16-я Парковая д.2 к1 кв.3».\nTypos, abbreviations, lower case and reordered parts are tolerated.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "region",
+            "in": "query",
+            "description": "Default region code (2 digits, for example 77) used when the line itself carries no region —\nhelps to parse a bare «street + house» without the upper level. Optional.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "bind",
+            "in": "query",
+            "description": "Enrich the parsing result with a binding to the state address registry (GAR/FIAS).\nThe mode is being prepared for release: a request carrying this flag currently returns 501\nand is not charged. Once released it will be charged on top of the base parsing.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "geocode",
+            "in": "query",
+            "description": "Enrich the parsing result with the geographic coordinates of the address.\nThe mode is being prepared for release: a request carrying this flag currently returns 501\nand is not charged. Once released it will be charged on top of the base parsing.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success. Returns the parsed address.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardizedAddress"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardizedAddress"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardizedAddress"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The string is missing or no address could be extracted from it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The API key is missing, expired or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Not enough credits on the balance to run the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded. Retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "in 42 seconds"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "An enrichment mode (bind or geocode) was requested. These modes are being prepared\nfor release and are not available yet; the request is not charged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "not_implemented",
+                  "title": "Режим пока не реализован",
+                  "message": "Запрошенная возможность объявлена в контракте, но ещё не включена. Запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AddressComponent": {
+        "required": [
+          "level",
+          "levelTitle",
+          "text"
+        ],
+        "type": "object",
+        "properties": {
+          "level": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AddressLevel"
+              }
+            ],
+            "description": "Адресный уровень элемента."
+          },
+          "levelTitle": {
+            "type": "string",
+            "description": "Человеко-читаемое название уровня по-русски («Улица», «Дом/здание», …)."
+          },
+          "text": {
+            "type": "string",
+            "description": "Нормализованное представление элемента одной строкой."
+          },
+          "types": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Типы элемента (для «площадных» уровней страна…улица): например [«улица»], [«город»].\nДля дома/помещения — тип дома/помещения, если удалось выделить. Может быть null."
+          },
+          "names": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Собственные имена элемента (например [«16», «Парковая»]). Может быть null."
+          },
+          "number": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Основной номер элемента (номер дома, участка, квартиры, комнаты). Может быть null."
+          },
+          "buildNumber": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Корпус — только для домов/зданий. Может быть null."
+          },
+          "structNumber": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Строение/сооружение — только для домов/зданий. Может быть null."
+          },
+          "plotNumber": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Номер земельного участка — когда элемент дома привязан к участку. Может быть null."
+          },
+          "misc": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Второстепенные значения (уточнения, имена персон в честь кого назван объект и т.п.). Может быть null."
+          }
+        },
+        "description": "Один разобранный элемент адреса. text — уже нормализованное человеко-читаемое\nпредставление элемента (например, «улица 16 Парковая», «д.2 корп.1»); остальные поля дают ту же\nинформацию в разобранном виде для программной обработки/сопоставления. Незаполненные поля = null."
+      },
+      "AddressLevel": {
+        "enum": [
+          "Undefined",
+          "Country",
+          "RegionArea",
+          "RegionCity",
+          "District",
+          "Settlement",
+          "City",
+          "CityDistrict",
+          "Locality",
+          "Territory",
+          "Street",
+          "Plot",
+          "Building",
+          "Apartment",
+          "Room"
+        ],
+        "description": "Адресный уровень элемента. Значения и порядок повторяют модель уровней ГАР/ФИАС:\nсверху вниз — от страны к комнате.\n\nЗначения:\n* `Undefined` — Уровень не определён.\n* `Country` — Страна.\n* `RegionArea` — Регион (область, республика, край).\n* `RegionCity` — Город федерального значения (Москва, Санкт-Петербург, Севастополь).\n* `District` — Административный/муниципальный район.\n* `Settlement` — Городское/сельское поселение.\n* `City` — Город.\n* `CityDistrict` — Район города (устаревший уровень ГАР).\n* `Locality` — Населённый пункт (посёлок, село, деревня).\n* `Territory` — Элемент планировочной структуры (квартал, территория, СНТ).\n* `Street` — Элемент улично-дорожной сети (улица, проспект, переулок).\n* `Plot` — Земельный участок.\n* `Building` — Здание/дом (с корпусом и строением).\n* `Apartment` — Помещение/квартира.\n* `Room` — Комната."
+      },
+      "ApiError": {
+        "title": "API error",
+        "required": [
+          "error",
+          "title",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Machine-readable reason code. Possible values:\n\n* `server_error` (500) — Сервис временно недоступен\n* `unauthorized` (401) — Требуется вход\n* `api_key_required` (401) — Нужен API-ключ\n* `account_not_activated` (402) — Аккаунт не активирован\n* `rate_limited_client` (429) — Слишком много запросов\n* `rate_limited_global` (429) — Высокая нагрузка на сервис\n* `provider_keys_exhausted` (429) — Сервис временно недоступен\n* `insufficient_credits` (402) — Недостаточно кредитов\n* `guest_quota_exhausted` (402) — Бесплатный лимит на сегодня исчерпан\n* `service_disabled` (503) — Проводятся плановые работы\n* `maintenance` (503) — Проводятся плановые работы\n* `guest_not_allowed` (402) — Нужна регистрация\n* `service_not_in_account_terms` (403) — Сервис не подключён\n* `bad_request` (400) — Некорректный запрос\n* `forbidden` (403) — Доступ запрещён\n* `not_found` (404) — Ничего не найдено\n* `method_not_allowed` (405) — Метод HTTP не поддерживается\n* `unsupported_media_type` (415) — Формат запроса не поддерживается\n* `not_implemented` (501) — Режим пока не реализован",
+            "example": "insufficient_credits"
+          },
+          "title": {
+            "type": "string",
+            "description": "Short title for a user interface.",
+            "example": "Insufficient credits"
+          },
+          "message": {
+            "type": "string",
+            "description": "Detailed explanation: what happened and what to do about it. Shown to the user as is."
+          },
+          "balance": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Current balance in credits. Filled in on 402 so that no extra balance request is needed; null otherwise."
+          },
+          "retryAfterSeconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "How many seconds to wait before retrying. Mirrors the Retry-After HTTP header. null when retrying will not help (for example, out of credits)."
+          },
+          "retryAfterText": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The same delay as a ready-to-show phrase. Saves clients from formatting it themselves."
+          }
+        },
+        "description": "A single response body for every rejection: validation errors, a missing key, an exhausted limit. Branch on the `error` field — it is a stable machine-readable code. `title` and `message` are meant for humans and their wording may change."
+      },
+      "GarBinding": {
+        "type": "object",
+        "properties": {
+          "guid": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "GUID объекта ГАР."
+          },
+          "objectId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Числовой ObjectId объекта ГАР.",
+            "format": "int64"
+          },
+          "kladrCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Код КЛАДР."
+          },
+          "postIndex": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Почтовый индекс."
+          },
+          "oktmo": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "ОКТМО."
+          },
+          "okato": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "ОКАТО."
+          }
+        },
+        "description": "Привязка разобранного адреса к объекту государственного адресного реестра (ГАР/ФИАС):\nидентификаторы объекта и связанные с ним коды — почтовый индекс, КЛАДР, ОКТМО, ОКАТО.\n\nВ текущей версии сервиса объект не заполняется: доступен базовый разбор адресной строки.\nПоле присутствует в контракте заранее, чтобы подключение привязки не потребовало\nнесовместимых изменений ответа."
+      },
+      "GeoPoint": {
+        "type": "object",
+        "properties": {
+          "lat": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "lon": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          }
+        }
+      },
+      "StandardizedAddress": {
+        "required": [
+          "input",
+          "normalized",
+          "quality",
+          "components"
+        ],
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string",
+            "description": "Исходная строка (эхо запроса)."
+          },
+          "normalized": {
+            "type": "string",
+            "description": "Нормализованный адрес одной строкой (собран из разобранных элементов)."
+          },
+          "quality": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Коэффициент качества разбора, 0..100. 100 — идеальный разбор без лишних фрагментов; ≥90 —\nнормально; ниже 80 — к результату стоит относиться осторожно. Оценивается именно разбор\nстроки: сверка с адресными реестрами на коэффициент не влияет.",
+            "format": "int32"
+          },
+          "countryCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Код страны (RU/EN/US…), если удалось определить. Может быть null."
+          },
+          "message": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Сообщение о неточности/проблеме, влияющей на качество (например, непонятный фрагмент). Может быть null."
+          },
+          "info": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Информационное сообщение, НЕ влияющее на качество. Может быть null."
+          },
+          "components": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AddressComponent"
+            },
+            "description": "Разобранные элементы адреса, сверху вниз (от страны к квартире)."
+          },
+          "extra": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Второстепенные элементы, не вписавшиеся в общую модель (этаж, а/я, очередь, индекс из текста,\nнормализованное название организации). Ключ — тип элемента, значение — строка. Может быть null."
+          },
+          "milliseconds": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Время разбора в миллисекундах.",
+            "format": "int32"
+          },
+          "gar": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GarBinding"
+              }
+            ],
+            "description": "Привязка к государственному адресному реестру (ГАР/ФИАС). В текущей версии сервиса\nвсегда null: доступен базовый разбор строки."
+          },
+          "geo": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GeoPoint"
+              }
+            ],
+            "description": "Географические координаты адреса. В текущей версии сервиса всегда null: доступен\nбазовый разбор строки."
+          }
+        },
+        "description": "Итог стандартизации одной адресной строки: разобранные элементы адреса, нормализованная\nзапись и коэффициент качества разбора."
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyBearer": {
+        "type": "http",
+        "description": "The API key goes into the `Authorization: Bearer ak_…` header.\n\nKeys are created in your account: https://atlorium.com/Account/Manage/ApiKeys\n\nTo try it without registration and without being charged, use the demo key\n`ak_sandbox_demo_mockdata_v1` — it returns mock data and marks the response with\nthe `X-Atlorium-Sandbox: true` header.",
+        "scheme": "bearer",
+        "bearerFormat": "ak_…"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Address Standardization API",
+      "description": "API documentation for address standardization (parsing an address string into levels, normalization and quality score).",
+      "externalDocs": {
+        "description": "Try it in the web interface",
+        "url": "https://atlorium.com/addressstdGUI"
+      }
+    }
+  ],
+  "externalDocs": {
+    "description": "Service overview, examples and limitations",
+    "url": "https://atlorium.com/addressstdDescription"
+  }
+}

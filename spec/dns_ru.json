@@ -1,0 +1,541 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "API проверки DNS",
+    "description": "Документация для API расширенного DNS lookup и проверки распространения записей.\n\n### Авторизация\n\nВсе методы требуют API-ключ в заголовке запроса:\n\n```\nAuthorization: Bearer ak_ваш_ключ\n```\n\nКлючи создаются в личном кабинете, раздел [API-ключи](https://atlorium.com/Account/Manage/ApiKeys).\nГостевого доступа у API нет: запрос без ключа получает 401.\n\n### Песочница\n\nКлюч `ak_sandbox_demo_mockdata_v1` работает без регистрации и без списаний — возвращает\nправдоподобные демо-данные и помечает ответ заголовком `X-Atlorium-Sandbox: true`.\nУдобно проверить разбор ответа до подключения настоящего ключа.\n\n### Тарификация\n\nКредиты списываются **только за успешный ответ**. Отказы (400, 401, 402, 429, 5xx)\nне тарифицируются. Цены и бесплатные квоты — на странице [тарифов](https://atlorium.com/pricing),\nбаланс пополняется в [личном кабинете](https://atlorium.com/Account/Manage/Billing).\n\n### Ошибки\n\nЛюбой отказ возвращает **одну и ту же структуру** JSON — схема `ApiError` внизу страницы.\nРазбирать разные форматы под разные коды не нужно: машинный код причины всегда лежит\nв поле `error`.\n\n### Полезные ссылки\n\n* [Описание сервиса](https://atlorium.com/dnsDescription) — что умеет, откуда данные, где границы применимости\n* [Веб-интерфейс](https://atlorium.com/dnsGUI) — те же расчёты руками, без ключа\n* [Тарифы и лимиты](https://atlorium.com/pricing)\n* [Личный кабинет: API-ключи](https://atlorium.com/Account/Manage/ApiKeys)\n* [Личный кабинет: баланс и платежи](https://atlorium.com/Account/Manage/Billing)\n* [Блог](https://atlorium.com/blog) — разборы задач и примеры интеграции\n* [Сообщить о проблеме](https://atlorium.com/bug-report) · [support@atlorium.com](mailto:support@atlorium.com)\n* [Оферта](https://atlorium.com/terms-of-service) · [Политика обработки информации](https://atlorium.com/privacy-policy)",
+    "termsOfService": "https://atlorium.com/terms-of-service",
+    "contact": {
+      "name": "Atlorium",
+      "url": "https://atlorium.com/bug-report",
+      "email": "support@atlorium.com"
+    },
+    "license": {
+      "name": "Проприетарная — использование по оферте",
+      "url": "https://atlorium.com/terms-of-service"
+    },
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Текущий сервер (адрес берётся из строки браузера)"
+    }
+  ],
+  "paths": {
+    "/api/Dns/lookup": {
+      "get": {
+        "tags": [
+          "API проверки DNS"
+        ],
+        "summary": "Выполняет DNS-запрос для основных типов записей (A, AAAA, MX, TXT, CNAME, NS).\nВозвращает все найденные записи для указанного домена.",
+        "description": "Пример запроса:\nGET /api/dns/lookup?domain=google.com\nGET /api/dns/lookup?domain=microsoft.com&resolver=8.8.8.8\n\nПример ответа:\n{\n  \"domain\": \"google.com\",\n  \"resolver\": \"1.1.1.1\",\n  \"records\": {\n    \"A\": [\"142.250.185.78\"],\n    \"AAAA\": [\"2a00:1450:4010:c08::64\"],\n    \"MX\": [\"smtp.google.com\"],\n    \"NS\": [\"ns1.google.com\", \"ns2.google.com\"]\n  }\n}",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "query",
+            "description": "Доменное имя для запроса.\n\nФормат: чистое доменное имя без протокола.\n\nПримеры:\n- example.com\n- sub.example.com\n- google.com\n\nНе допускаются:\n- URL с протоколом (https://example.com)\n- IP-адреса",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "resolver",
+            "in": "query",
+            "description": "IP-адрес DNS-резолвера для выполнения запроса (необязательный).\n\nПо умолчанию: Cloudflare (1.1.1.1)\n\nПримеры альтернативных резолверов:\n- 8.8.8.8 (Google)\n- 208.67.222.222 (OpenDNS)\n- 9.9.9.9 (Quad9)\n- Корпоративный DNS-сервер",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ. Возвращает DNS-записи для указанного домена.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DnsLookupResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DnsLookupResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DnsLookupResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Некорректные параметры запроса:\n- domain не указан или пустой\n- Некорректный формат домена\n- Некорректный IP-адрес резолвера",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API-ключ отсутствует, просрочен или недействителен.\nДобавьте заголовок запроса: Authorization: Bearer {api_key}",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Недостаточно кредитов на балансе для выполнения запроса.\nПополните баланс в личном кабинете: /Account/Manage/Billing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Превышен rate-limit: исчерпана дневная или минутная квота для данного сервиса.\nПовторите запрос позже.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "через 42 секунды"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Ошибка при выполнении DNS-запроса:\n- DNS-резолвер недоступен или не отвечает\n- Таймаут запроса к резолверу",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "server_error",
+                  "title": "Сервис временно недоступен",
+                  "message": "Запрос не может быть обработан прямо сейчас. Повторите попытку через несколько минут. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/Dns/propagation": {
+      "get": {
+        "tags": [
+          "API проверки DNS"
+        ],
+        "summary": "Проверяет распространение DNS-записей (пропагацию) через несколько публичных резолверов.\nПолезно для проверки того, обновились ли DNS-записи на всех серверах после изменения.",
+        "description": "Пример запроса:\nGET /api/dns/propagation?domain=example.com\nGET /api/dns/propagation?domain=new-site.com&resolvers=8.8.8.8,1.1.1.1\n\nПример использования:\nПосле изменения DNS-записей домена выполните этот запрос,\nчтобы проверить, распространились ли изменения на все резолверы.\nПолная пропагация может занять от нескольких минут до 48 часов.",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "query",
+            "description": "Доменное имя для проверки.\n\nФормат: чистое доменное имя без протокола.\n\nПримеры:\n- example.com\n- new-domain.com",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "resolvers",
+            "in": "query",
+            "description": "Список IP-адресов DNS-резолверов через запятую (необязательный).\n\nПо умолчанию используются 4 резолвера:\n- Google (8.8.8.8)\n- Cloudflare (1.1.1.1)\n- OpenDNS (208.67.222.222)\n- Quad9 (9.9.9.9)\n\nОграничения:\n- Максимум 8 резолверов за один запрос\n- Только публичные IP-адреса (внутренние и зарезервированные отклоняются)\n- Повторы одного и того же адреса схлопываются (за один опрос платите один раз)\n- Некорректный адрес или превышение лимита — 400 Bad Request (список не обрезается молча)\n\nТАРИФИКАЦИЯ: порезолверная. Каждый резолвер опрашивается отдельно по всем типам\nзаписей, поэтому проверка по N резолверам стоит столько же, сколько N обычных\nDNS-запросов, и на столько же уменьшает дневной бесплатный лимит. Запрос без этого\nпараметра опрашивает 4 резолвера по умолчанию и тарифицируется как 4 единицы.\n\nПример: 8.8.8.8,1.1.1.1,208.67.222.222",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ. Возвращает статус пропагации DNS по всем резолверам.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DnsPropagationResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DnsPropagationResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DnsPropagationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Некорректные параметры запроса:\n- domain не указан или пустой\n- Некорректный формат домена\n- Некорректный IP-адрес одного из резолверов",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API-ключ отсутствует, просрочен или недействителен.\nДобавьте заголовок запроса: Authorization: Bearer {api_key}",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Недостаточно кредитов на балансе для выполнения запроса.\nПополните баланс в личном кабинете: /Account/Manage/Billing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Превышен rate-limit: исчерпана дневная или минутная квота для данного сервиса.\nПовторите запрос позже.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "через 42 секунды"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Ошибка при проверке DNS-пропагации:\n- Один или несколько резолверов недоступны или не отвечают\n- Таймаут опроса резолверов",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "server_error",
+                  "title": "Сервис временно недоступен",
+                  "message": "Запрос не может быть обработан прямо сейчас. Повторите попытку через несколько минут. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "title": "Ошибка API",
+        "required": [
+          "error",
+          "title",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Машинный код причины отказа. Возможные значения:\n\n* `server_error` (500) — Сервис временно недоступен\n* `unauthorized` (401) — Требуется вход\n* `api_key_required` (401) — Нужен API-ключ\n* `account_not_activated` (402) — Аккаунт не активирован\n* `rate_limited_client` (429) — Слишком много запросов\n* `rate_limited_global` (429) — Высокая нагрузка на сервис\n* `provider_keys_exhausted` (429) — Сервис временно недоступен\n* `insufficient_credits` (402) — Недостаточно кредитов\n* `guest_quota_exhausted` (402) — Бесплатный лимит на сегодня исчерпан\n* `service_disabled` (503) — Проводятся плановые работы\n* `maintenance` (503) — Проводятся плановые работы\n* `guest_not_allowed` (402) — Нужна регистрация\n* `service_not_in_account_terms` (403) — Сервис не подключён\n* `bad_request` (400) — Некорректный запрос\n* `forbidden` (403) — Доступ запрещён\n* `not_found` (404) — Ничего не найдено\n* `method_not_allowed` (405) — Метод HTTP не поддерживается\n* `unsupported_media_type` (415) — Формат запроса не поддерживается\n* `not_implemented` (501) — Режим пока не реализован",
+            "example": "insufficient_credits"
+          },
+          "title": {
+            "type": "string",
+            "description": "Короткий заголовок для интерфейса.",
+            "example": "Недостаточно кредитов"
+          },
+          "message": {
+            "type": "string",
+            "description": "Подробное объяснение: что произошло и что с этим делать. Показывается пользователю целиком."
+          },
+          "balance": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Текущий баланс в кредитах. Заполняется при 402, чтобы не делать отдельный запрос за балансом; в остальных случаях null."
+          },
+          "retryAfterSeconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Через сколько секунд имеет смысл повторить запрос. Дублирует HTTP-заголовок Retry-After. null — если повтор не поможет (например, кончились кредиты)."
+          },
+          "retryAfterText": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Та же задержка готовой фразой — «через 2 мин 30 с». Чтобы клиентам не приходилось самим склонять минуты и секунды."
+          }
+        },
+        "description": "Единое тело ответа для любого отказа: и для ошибки валидации, и для отсутствующего ключа, и для исчерпанного лимита. Ветвиться в коде следует по полю `error` — это стабильный машинный код. Поля `title` и `message` предназначены человеку, их формулировки могут меняться."
+      },
+      "DnsLookupResponse": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "Проверенное доменное имя."
+          },
+          "resolver": {
+            "type": "string",
+            "description": "Резолвер, ответивший на запрос: адрес или узнаваемое имя публичного DNS-сервиса\n(например, Google или Cloudflare)."
+          },
+          "requestedAtUtc": {
+            "type": "string",
+            "description": "Момент выполнения запроса (UTC). Полезен как отметка времени: DNS меняется, и без неё\nсохранённый ответ невозможно соотнести с состоянием домена.",
+            "format": "date-time"
+          },
+          "records": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DnsRecordGroup"
+            },
+            "description": "Найденные записи, сгруппированные по типу."
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Ошибки резолва: домен не существует, таймаут, отказ сервера. Пустой список —\nзапрос отработал полностью. Непустой список не отменяет уже найденные записи\nв records: часть типов могла разрешиться, часть — нет."
+          }
+        },
+        "description": "Результат обычной проверки DNS — ответ одного резолвера по одному домену."
+      },
+      "DnsPropagationResponse": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "Проверенное доменное имя."
+          },
+          "requestedAtUtc": {
+            "type": "string",
+            "description": "Момент выполнения запроса (UTC).",
+            "format": "date-time"
+          },
+          "snapshots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DnsResolverSnapshot"
+            },
+            "description": "Ответы отдельных резолверов. Расхождение значений между снимками и означает,\nчто изменения ещё не разошлись."
+          }
+        },
+        "description": "Отчёт о распространении (propagation): один и тот же домен спрошен у нескольких\nрезолверов сразу.\n\nСмысл проверки — увидеть, разошлись ли изменения по миру. Сразу после правки записей\nчасть резолверов отдаёт новое значение, а часть ещё держит в кэше старое, и выглядит\nэто как «у меня сайт открывается, а у клиента нет»."
+      },
+      "DnsRecordEntry": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Имя, к которому относится запись. Обычно совпадает с запрошенным доменом, но\nу поддоменов и почтовых записей отличается: mail.example.com."
+          },
+          "value": {
+            "type": "string",
+            "description": "Значение записи. Что именно в нём лежит, зависит от типа: у A — IPv4-адрес\n(93.184.216.34), у AAAA — IPv6, у MX — имя почтового сервера,\nу TXT — произвольная строка, у CNAME и NS — доменное имя."
+          },
+          "ttl": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Время жизни записи в секундах — сколько её разрешено держать в кэше. Маленькое\nзначение (60–300) обычно ставят перед переездом, чтобы изменения разошлись быстро.\nnull — если резолвер не сообщил TTL.",
+            "format": "int32"
+          },
+          "preference": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Приоритет записи MX: чем МЕНЬШЕ число, тем выше приоритет почтового сервера.\nДля остальных типов записей — null.",
+            "format": "int32"
+          },
+          "details": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Дополнительные сведения по записи в свободной форме, если тип записи их подразумевает.\nnull — если добавить нечего."
+          }
+        },
+        "description": "Одна DNS-запись в едином виде — независимо от того, какого она типа.\nЗначение всегда лежит в value, а специфичные для типа детали —\nв preference и details."
+      },
+      "DnsRecordGroup": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Тип записей в группе: A (адрес IPv4), AAAA (адрес IPv6),\nMX (почтовый сервер), TXT (текст: SPF, DKIM, проверки владения),\nCNAME (псевдоним), NS (управляющие DNS-серверы домена)."
+          },
+          "records": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DnsRecordEntry"
+            },
+            "description": "Сами записи. Пустой список означает, что записей такого типа у домена нет."
+          }
+        },
+        "description": "Записи одного типа, сложенные вместе. У домена почти всегда несколько записей одного\nтипа — например, два адреса A или три почтовых сервера MX."
+      },
+      "DnsResolverSnapshot": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "Узнаваемое имя резолвера для показа человеку: «Google», «Cloudflare», «Yandex»."
+          },
+          "resolver": {
+            "type": "string",
+            "description": "Адрес резолвера, к которому фактически обращались."
+          },
+          "durationMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Сколько миллисекунд занял ответ этого резолвера. Заметно большее значение на фоне\nостальных обычно означает не проблему домена, а удалённость самого резолвера.",
+            "format": "int64"
+          },
+          "success": {
+            "type": "boolean",
+            "description": "Ответил ли резолвер успешно. При false причина лежит в error,\nа records будет пустым — учитывать такой снимок при сравнении значений нельзя."
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Причина неудачи, если резолвер не ответил. null — при успехе."
+          },
+          "records": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DnsRecordGroup"
+            },
+            "description": "Записи, которые вернул именно этот резолвер."
+          }
+        },
+        "description": "Ответ одного резолвера в проверке распространения."
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyBearer": {
+        "type": "http",
+        "description": "API-ключ передаётся в заголовке `Authorization: Bearer ak_…`.\n\nКлючи создаются в личном кабинете: https://atlorium.com/Account/Manage/ApiKeys\n\nЧтобы попробовать без регистрации и без списаний, вставьте демо-ключ\n`ak_sandbox_demo_mockdata_v1` — он возвращает моковые данные и помечает ответ\nзаголовком `X-Atlorium-Sandbox: true`.",
+        "scheme": "bearer",
+        "bearerFormat": "ak_…"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "API проверки DNS",
+      "description": "Документация для API расширенного DNS lookup и проверки распространения записей.",
+      "externalDocs": {
+        "description": "Попробовать в веб-интерфейсе",
+        "url": "https://atlorium.com/dnsGUI"
+      }
+    }
+  ],
+  "externalDocs": {
+    "description": "Описание сервиса, примеры и границы применимости",
+    "url": "https://atlorium.com/dnsDescription"
+  }
+}

@@ -1,0 +1,1086 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "EGRUL/EGRIP API",
+    "description": "API documentation for EGRUL/EGRIP data (company card by INN/OGRN/OGRNIP, search by name, official PDF excerpt download).\n\n### Authorization\n\nEvery method requires an API key in the request header:\n\n```\nAuthorization: Bearer ak_your_key\n```\n\nKeys are created in your account, section [API keys](https://atlorium.com/Account/Manage/ApiKeys).\nThe API has no guest access: a request without a key returns 401.\n\n### Sandbox\n\nThe key `ak_sandbox_demo_mockdata_v1` works without registration and is never charged — it\nreturns realistic demo data and marks the response with the `X-Atlorium-Sandbox: true` header.\nUse it to validate your response parsing before plugging in a real key.\n\n### Billing\n\nCredits are charged **only for a successful response**. Rejections (400, 401, 402, 429, 5xx)\nare never charged. Prices and free quotas are on the [pricing page](https://atlorium.com/pricing);\nthe balance is topped up in your [account](https://atlorium.com/Account/Manage/Billing).\n\n### Errors\n\nEvery rejection returns **the same JSON structure** — see the `ApiError` schema at the bottom\nof this page. There is no need to parse a different shape per status code: the machine-readable\nreason always lives in the `error` field.\n\n### Useful links\n\n* [Service overview](https://atlorium.com/egrulDescription) — what it does, where the data comes from, what it does not cover\n* [Web interface](https://atlorium.com/egrulGUI) — the same lookups by hand, no key required\n* [Pricing and limits](https://atlorium.com/pricing)\n* [Account: API keys](https://atlorium.com/Account/Manage/ApiKeys)\n* [Account: balance and payments](https://atlorium.com/Account/Manage/Billing)\n* [Blog](https://atlorium.com/blog)\n* [Report a problem](https://atlorium.com/bug-report) · [support@atlorium.com](mailto:support@atlorium.com)\n* [Terms of Service](https://atlorium.com/terms-of-service) · [Privacy policy](https://atlorium.com/privacy-policy)",
+    "termsOfService": "https://atlorium.com/terms-of-service",
+    "contact": {
+      "name": "Atlorium",
+      "url": "https://atlorium.com/bug-report",
+      "email": "support@atlorium.com"
+    },
+    "license": {
+      "name": "Proprietary — see Terms of Service",
+      "url": "https://atlorium.com/terms-of-service"
+    },
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Current server"
+    }
+  ],
+  "paths": {
+    "/api/Egrul/{query}": {
+      "get": {
+        "tags": [
+          "EGRUL/EGRIP API"
+        ],
+        "summary": "Returns a company card by INN, OGRN or OGRNIP.",
+        "description": "Example requests:\nGET /api/egrul/7707083893\nGET /api/egrul/304500116000157?extended=true",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "path",
+            "description": "Identifier: INN (10 digits for a company, 12 for a sole proprietor), OGRN (13 digits)\nor OGRNIP (15 digits). Example: 7707083893.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "extended",
+            "in": "query",
+            "description": "Extended data taken from the official extract and absent from the basic card: for a sole\nproprietor — email address and gender; for a company — the list of members/founders and\ntheir shares. Defaults to false. Enabling it requires extra processing of the extract,\nso the response may take longer to build.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success. Returns the company card.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyLookupResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyLookupResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyLookupResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The identifier is missing or malformed (INN / OGRN / OGRNIP).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No company with the given identifier was found in the register.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "not_found",
+                  "title": "Ничего не найдено",
+                  "message": "По запросу «GET /api/…» данных нет. Если сомневаетесь в адресе метода — сверьтесь со спецификацией: /openapi/{идентификатор_сервиса}_ru.json.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The API key is missing, expired or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Not enough credits on the balance to run the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded. Retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "in 42 seconds"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The EGRUL/EGRIP company data service is temporarily unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "maintenance",
+                  "title": "Проводятся плановые работы",
+                  "message": "Выполнение запросов временно приостановлено на время плановых работ. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/Egrul/search": {
+      "get": {
+        "tags": [
+          "EGRUL/EGRIP API"
+        ],
+        "summary": "Searches subjects (legal entities and sole proprietors) by name.",
+        "description": "Example requests:\nGET /api/egrul/search?query=Сбербанк\nGET /api/egrul/search?query=Иванов%20Иван%20Иванович&limit=20",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "description": "Search string: part of a company name or of a sole proprietor's full name.\nExample: Сбербанк.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of results (10 by default, 50 at most).",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success. Returns matching entities as short cards.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanySearchResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanySearchResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanySearchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The query parameter is missing or empty.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The API key is missing, expired or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Not enough credits on the balance to run the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded. Retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "in 42 seconds"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The EGRUL/EGRIP company data service is temporarily unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "maintenance",
+                  "title": "Проводятся плановые работы",
+                  "message": "Выполнение запросов временно приостановлено на время плановых работ. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/Egrul/{query}/excerpt": {
+      "get": {
+        "tags": [
+          "EGRUL/EGRIP API"
+        ],
+        "summary": "Returns the official EGRUL/EGRIP excerpt for the subject as a PDF file.",
+        "description": "Example request:\nGET /api/egrul/7707083893/excerpt",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "path",
+            "description": "INN, OGRN or OGRNIP of the entity. Example: 7707083893.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success. Returns the official extract as a PDF file.",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "description": "File contents. The file name is provided in the Content-Disposition header.",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The identifier is missing or malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No extract is available for the given identifier.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "not_found",
+                  "title": "Ничего не найдено",
+                  "message": "По запросу «GET /api/…» данных нет. Если сомневаетесь в адресе метода — сверьтесь со спецификацией: /openapi/{идентификатор_сервиса}_ru.json.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The API key is missing, expired or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Not enough credits on the balance to run the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded. Retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "in 42 seconds"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The EGRUL/EGRIP company data service is temporarily unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "maintenance",
+                  "title": "Проводятся плановые работы",
+                  "message": "Выполнение запросов временно приостановлено на время плановых работ. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "title": "API error",
+        "required": [
+          "error",
+          "title",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Machine-readable reason code. Possible values:\n\n* `server_error` (500) — Сервис временно недоступен\n* `unauthorized` (401) — Требуется вход\n* `api_key_required` (401) — Нужен API-ключ\n* `account_not_activated` (402) — Аккаунт не активирован\n* `rate_limited_client` (429) — Слишком много запросов\n* `rate_limited_global` (429) — Высокая нагрузка на сервис\n* `provider_keys_exhausted` (429) — Сервис временно недоступен\n* `insufficient_credits` (402) — Недостаточно кредитов\n* `guest_quota_exhausted` (402) — Бесплатный лимит на сегодня исчерпан\n* `service_disabled` (503) — Проводятся плановые работы\n* `maintenance` (503) — Проводятся плановые работы\n* `guest_not_allowed` (402) — Нужна регистрация\n* `service_not_in_account_terms` (403) — Сервис не подключён\n* `bad_request` (400) — Некорректный запрос\n* `forbidden` (403) — Доступ запрещён\n* `not_found` (404) — Ничего не найдено\n* `method_not_allowed` (405) — Метод HTTP не поддерживается\n* `unsupported_media_type` (415) — Формат запроса не поддерживается\n* `not_implemented` (501) — Режим пока не реализован",
+            "example": "insufficient_credits"
+          },
+          "title": {
+            "type": "string",
+            "description": "Short title for a user interface.",
+            "example": "Insufficient credits"
+          },
+          "message": {
+            "type": "string",
+            "description": "Detailed explanation: what happened and what to do about it. Shown to the user as is."
+          },
+          "balance": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Current balance in credits. Filled in on 402 so that no extra balance request is needed; null otherwise."
+          },
+          "retryAfterSeconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "How many seconds to wait before retrying. Mirrors the Retry-After HTTP header. null when retrying will not help (for example, out of credits)."
+          },
+          "retryAfterText": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The same delay as a ready-to-show phrase. Saves clients from formatting it themselves."
+          }
+        },
+        "description": "A single response body for every rejection: validation errors, a missing key, an exhausted limit. Branch on the `error` field — it is a stable machine-readable code. `title` and `message` are meant for humans and their wording may change."
+      },
+      "CompanyFounder": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Тип учредителя: физическое лицо, российское/иностранное юридическое лицо, государство и т.п."
+          },
+          "name": {
+            "type": "string",
+            "description": "Наименование ЮЛ-учредителя или ФИО физлица-учредителя."
+          },
+          "inn": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "ИНН учредителя (если раскрыт). Иначе пусто."
+          },
+          "shareNominal": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Номинальная стоимость доли в рублях (если раскрыта). Иначе пусто.",
+            "format": "double"
+          },
+          "sharePercent": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Размер доли в процентах (если раскрыт). Иначе пусто.",
+            "format": "double"
+          }
+        },
+        "description": "Учредитель (участник) организации. Заполняется для ЮЛ из официальной выписки, поэтому может\nбыть доступен не для всех организаций (например, состав участников банков/АО в реестре\nраскрывается не всегда). Если данных нет — список учредителей у карточки будет пустым."
+      },
+      "CompanyKind": {
+        "enum": [
+          "Unknown",
+          "LegalEntity",
+          "SoleProprietor"
+        ],
+        "description": "Тип субъекта, на который выдана карточка.\n\nЗначения:\n* `Unknown` — Тип не определён (например, ничего не найдено по запросу).\n* `LegalEntity` — Юридическое лицо (ЮЛ, ЕГРЮЛ): ООО, АО, ПАО, НКО и т.п.\n* `SoleProprietor` — Индивидуальный предприниматель (ИП, ЕГРИП), включая главу КФХ."
+      },
+      "CompanyLookupResult": {
+        "type": "object",
+        "properties": {
+          "found": {
+            "type": "boolean",
+            "description": "true, если организация найдена по переданному идентификатору. false означает, что по\nИНН/ОГРН ничего не нашлось (опечатка либо такого субъекта нет в реестре) — в этом случае\nостальные поля карточки пустые."
+          },
+          "kind": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CompanyKind"
+              }
+            ],
+            "description": "Тип субъекта: юридическое лицо (ЕГРЮЛ) или индивидуальный предприниматель (ЕГРИП)."
+          },
+          "inn": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "ИНН (10 цифр у ЮЛ, 12 у ИП/физлица)."
+          },
+          "ogrn": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "ОГРН (13 цифр у ЮЛ) или ОГРНИП (15 цифр у ИП)."
+          },
+          "kpp": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "КПП — только для ЮЛ (9 цифр). У ИП всегда пусто."
+          },
+          "fullName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Полное наименование: для ЮЛ — полное фирменное наименование (\"ПУБЛИЧНОЕ АКЦИОНЕРНОЕ\nОБЩЕСТВО \\\"СБЕРБАНК РОССИИ\\\"\"), для ИП — ФИО предпринимателя."
+          },
+          "shortName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Сокращённое наименование ЮЛ (\"ПАО СБЕРБАНК\"). У ИП обычно совпадает с ФИО или пусто."
+          },
+          "legalFormCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Организационно-правовая форма (ОКОПФ), код. Только для ЮЛ. Иначе пусто."
+          },
+          "status": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Текстовый статус: \"Действующая организация\", \"Деятельность прекращена\" и т.п."
+          },
+          "active": {
+            "type": "boolean",
+            "description": "true, если субъект действующий (не ликвидирован/не прекратил деятельность)."
+          },
+          "registrationDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Дата присвоения ОГРН/ОГРНИП (государственной регистрации).",
+            "format": "date"
+          },
+          "registrationDateBefore2002": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Дата первичной регистрации до 01.07.2002 — только для «старых» ЮЛ, созданных до введения\nЕГРЮЛ. Иначе пусто.",
+            "format": "date"
+          },
+          "taxRegistrationDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Дата постановки на учёт в налоговом органе.",
+            "format": "date"
+          },
+          "dataDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Дата, на которую актуальны сведения карточки (дата формирования данных).",
+            "format": "date"
+          },
+          "address": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Юридический адрес одной строкой (\"117312, Г.МОСКВА, УЛ. ВАВИЛОВА, Д.19\"). Для ИП пусто."
+          },
+          "postalCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Почтовый индекс адреса (если есть)."
+          },
+          "regionCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Код региона (субъекта РФ), например \"77\"."
+          },
+          "regionName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Наименование региона, например \"Г.МОСКВА\"."
+          },
+          "registrationAuthority": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Наименование регистрирующего органа (где зарегистрирован субъект)."
+          },
+          "registrationAuthorityCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Код регистрирующего органа."
+          },
+          "taxAuthority": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Наименование налогового органа (где субъект состоит на учёте)."
+          },
+          "taxAuthorityCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Код налогового органа."
+          },
+          "primaryOkved": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CompanyOkved"
+              }
+            ],
+            "description": "Основной вид деятельности по ОКВЭД (код + наименование). Иначе пусто."
+          },
+          "primaryOkvedType": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Тип сведений об основном ОКВЭД: \"отчётный\" или \"заявительный\" (как именно эти сведения\nпопали в реестр). Иначе пусто."
+          },
+          "additionalOkveds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CompanyOkved"
+            },
+            "description": "Дополнительные виды деятельности по ОКВЭД. Может быть пустым списком."
+          },
+          "authorizedCapital": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Размер уставного капитала в рублях. Только для ЮЛ. Иначе пусто.",
+            "format": "double"
+          },
+          "capitalType": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Вид капитала (\"УСТАВНЫЙ КАПИТАЛ\", \"СКЛАДОЧНЫЙ КАПИТАЛ\" и т.п.). Только для ЮЛ."
+          },
+          "formationMethod": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Способ образования ЮЛ (\"Создание юридического лица до 01.07.2002\" и т.п.). Только для ЮЛ."
+          },
+          "managers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CompanyManager"
+            },
+            "description": "Лица, имеющие право действовать без доверенности (руководители). Обычно один. Только для ЮЛ."
+          },
+          "founders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CompanyFounder"
+            },
+            "description": "Учредители (участники). Заполняется из официальной выписки и может отсутствовать для части\nорганизаций — тогда список пуст. Только для ЮЛ."
+          },
+          "lastName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Фамилия ИП. Только для ИП."
+          },
+          "firstName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Имя ИП. Только для ИП."
+          },
+          "middleName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Отчество ИП (при наличии). Только для ИП."
+          },
+          "citizenship": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Гражданство ИП (например, \"гражданин Российской Федерации\"). Если раскрыто."
+          },
+          "gender": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Пол ИП (\"мужской\"/\"женский\"), если раскрыт в выписке. Иначе пусто."
+          },
+          "email": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Адрес электронной почты, если он указан в выписке. Иначе пусто."
+          },
+          "specialTaxRegimes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Применяемые специальные налоговые режимы (по последним доступным сведениям): например\n\"УСН\", \"ЕСХН\", \"ПСН\", \"НПД\", \"АУСН\". Пустой список — спецрежимов не выявлено / общий режим."
+          },
+          "smeCategory": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Категория в реестре малого и среднего предпринимательства (МСП): \"Микропредприятие\",\n\"Малое предприятие\", \"Среднее предприятие\". Пусто, если субъект не числится в реестре МСП."
+          },
+          "smeRegistryDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Дата включения в реестр МСП (если применимо).",
+            "format": "date"
+          },
+          "publications": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CompanyPublication"
+            },
+            "description": "Публикации в «Вестнике государственной регистрации» (для ЮЛ). Может быть пуст."
+          },
+          "massAddress": {
+            "type": "boolean",
+            "description": "Признак «массового адреса»: по юридическому адресу зарегистрировано много других организаций.\nКосвенный фактор риска при проверке контрагента. Для ИП всегда false."
+          },
+          "officialExcerptAvailable": {
+            "type": "boolean",
+            "description": "true, если по субъекту доступна официальная выписка из реестра в PDF (её можно скачать\nотдельным запросом — см. метод выгрузки выписки в API)."
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Предупреждения о качестве данных: например, если какое-то поле не удалось надёжно\nсопоставить при сборке карточки. Пустой список означает, что замечаний нет."
+          },
+          "elapsedMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Время выполнения запроса в миллисекундах.",
+            "format": "int64"
+          }
+        },
+        "description": "Полная карточка организации одним плоским набором полей.\nОбъединяет реквизиты, статус, адрес, руководителя/учредителей, капитал, виды\nдеятельности, сведения о регистрирующем/налоговом органе, налоговые режимы и данные о МСП.\n\n\nКакие поля заполнены — зависит от kind:\nдля ЮЛ заполняются КПП, уставный капитал, руководитель, способ образования; для ИП — ФИО и\n(если раскрыты в выписке) e-mail, пол, гражданство. Неприменимые поля остаются пустыми."
+      },
+      "CompanyManager": {
+        "type": "object",
+        "properties": {
+          "fullName": {
+            "type": "string",
+            "description": "ФИО руководителя, например \"ГРЕФ ГЕРМАН ОСКАРОВИЧ\"."
+          },
+          "inn": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "ИНН руководителя (если раскрыт). Иначе пусто."
+          },
+          "position": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Должность, например \"ПРЕЗИДЕНТ, ПРЕДСЕДАТЕЛЬ ПРАВЛЕНИЯ\". Иначе пусто."
+          }
+        },
+        "description": "Лицо, имеющее право действовать от имени организации без доверенности (руководитель).\nДля ЮЛ это, как правило, директор/генеральный директор/президент."
+      },
+      "CompanyOkved": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Код вида деятельности, например \"62.01\"."
+          },
+          "name": {
+            "type": "string",
+            "description": "Наименование вида деятельности, например \"Разработка компьютерного программного обеспечения\"."
+          }
+        },
+        "description": "Вид экономической деятельности по классификатору ОКВЭД-2: код + расшифровка."
+      },
+      "CompanyPublication": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Код типа публикации (служебный).",
+            "format": "int32"
+          },
+          "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Количество публикаций данного типа.",
+            "format": "int32"
+          },
+          "url": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Ссылка на публикацию."
+          }
+        },
+        "description": "Запись о публикации сведений об организации в журнале «Вестник государственной регистрации»."
+      },
+      "CompanySearchItem": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CompanyKind"
+              }
+            ],
+            "description": "Тип субъекта: юридическое лицо (ЕГРЮЛ) или ИП (ЕГРИП)."
+          },
+          "inn": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "ИНН субъекта."
+          },
+          "ogrn": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "ОГРН/ОГРНИП субъекта."
+          },
+          "name": {
+            "type": "string",
+            "description": "Наименование ЮЛ или ФИО ИП."
+          },
+          "status": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Текстовый статус (например, \"Действующая организация\")."
+          },
+          "region": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Регион (если известен)."
+          },
+          "primaryOkved": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Основной вид деятельности по ОКВЭД (если известен)."
+          }
+        },
+        "description": "Краткая карточка субъекта для результатов поиска по наименованию/ФИО (когда по запросу может\nнайтись несколько организаций). По выбранному элементу затем запрашивается полная карточка."
+      },
+      "CompanySearchResponse": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Исходный поисковый запрос (как его передал клиент)."
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CompanySearchItem"
+            },
+            "description": "Найденные субъекты (ограничено лимитом запроса)."
+          },
+          "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Сколько результатов вернулось в этом ответе.",
+            "format": "int32"
+          },
+          "elapsedMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Время выполнения запроса в миллисекундах.",
+            "format": "int64"
+          }
+        },
+        "description": "Ответ на поиск по наименованию/ФИО: список кратких карточек + сколько всего найдено."
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyBearer": {
+        "type": "http",
+        "description": "The API key goes into the `Authorization: Bearer ak_…` header.\n\nKeys are created in your account: https://atlorium.com/Account/Manage/ApiKeys\n\nTo try it without registration and without being charged, use the demo key\n`ak_sandbox_demo_mockdata_v1` — it returns mock data and marks the response with\nthe `X-Atlorium-Sandbox: true` header.",
+        "scheme": "bearer",
+        "bearerFormat": "ak_…"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "EGRUL/EGRIP API",
+      "description": "API documentation for EGRUL/EGRIP data (company card by INN/OGRN/OGRNIP, search by name, official PDF excerpt download).",
+      "externalDocs": {
+        "description": "Try it in the web interface",
+        "url": "https://atlorium.com/egrulGUI"
+      }
+    }
+  ],
+  "externalDocs": {
+    "description": "Service overview, examples and limitations",
+    "url": "https://atlorium.com/egrulDescription"
+  }
+}

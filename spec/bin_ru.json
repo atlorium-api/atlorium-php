@@ -1,0 +1,558 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "API BIN Lookup",
+    "description": "Документация для API BIN Lookup (карта, банк-эмитент и страна по BIN/IIN, антифрод по IP, валидация формата BIN).\n\n### Авторизация\n\nВсе методы требуют API-ключ в заголовке запроса:\n\n```\nAuthorization: Bearer ak_ваш_ключ\n```\n\nКлючи создаются в личном кабинете, раздел [API-ключи](https://atlorium.com/Account/Manage/ApiKeys).\nГостевого доступа у API нет: запрос без ключа получает 401.\n\n### Песочница\n\nКлюч `ak_sandbox_demo_mockdata_v1` работает без регистрации и без списаний — возвращает\nправдоподобные демо-данные и помечает ответ заголовком `X-Atlorium-Sandbox: true`.\nУдобно проверить разбор ответа до подключения настоящего ключа.\n\n### Тарификация\n\nКредиты списываются **только за успешный ответ**. Отказы (400, 401, 402, 429, 5xx)\nне тарифицируются. Цены и бесплатные квоты — на странице [тарифов](https://atlorium.com/pricing),\nбаланс пополняется в [личном кабинете](https://atlorium.com/Account/Manage/Billing).\n\n### Ошибки\n\nЛюбой отказ возвращает **одну и ту же структуру** JSON — схема `ApiError` внизу страницы.\nРазбирать разные форматы под разные коды не нужно: машинный код причины всегда лежит\nв поле `error`.\n\n### Полезные ссылки\n\n* [Описание сервиса](https://atlorium.com/binDescription) — что умеет, откуда данные, где границы применимости\n* [Веб-интерфейс](https://atlorium.com/binGUI) — те же расчёты руками, без ключа\n* [Тарифы и лимиты](https://atlorium.com/pricing)\n* [Личный кабинет: API-ключи](https://atlorium.com/Account/Manage/ApiKeys)\n* [Личный кабинет: баланс и платежи](https://atlorium.com/Account/Manage/Billing)\n* [Блог](https://atlorium.com/blog) — разборы задач и примеры интеграции\n* [Сообщить о проблеме](https://atlorium.com/bug-report) · [support@atlorium.com](mailto:support@atlorium.com)\n* [Оферта](https://atlorium.com/terms-of-service) · [Политика обработки информации](https://atlorium.com/privacy-policy)",
+    "termsOfService": "https://atlorium.com/terms-of-service",
+    "contact": {
+      "name": "Atlorium",
+      "url": "https://atlorium.com/bug-report",
+      "email": "support@atlorium.com"
+    },
+    "license": {
+      "name": "Проприетарная — использование по оферте",
+      "url": "https://atlorium.com/terms-of-service"
+    },
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Текущий сервер (адрес берётся из строки браузера)"
+    }
+  ],
+  "paths": {
+    "/api/Bin/{bin}": {
+      "get": {
+        "tags": [
+          "API BIN Lookup"
+        ],
+        "summary": "Возвращает карточку по BIN/IIN (6, 8 или 10 цифр). Для максимальной точности\nрекомендуется передавать 8 и более цифр.",
+        "description": "Примеры запросов:\nGET /api/bin/48334884\nGET /api/bin/48334884?customerIp=8.8.8.8",
+        "parameters": [
+          {
+            "name": "bin",
+            "in": "path",
+            "description": "BIN/IIN — первые 6, 8 или 10 цифр номера карты. Пример: 48334884.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "customerIp",
+            "in": "query",
+            "description": "(Необязательно) IP-адрес клиента. Если передан — в ответ добавятся антифрод-данные по IP\n(страна/город, совпадение страны IP со страной карты, проверка по спискам блокировок).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ. Возвращает карточку BIN (valid=false, если BIN не найден).",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BinLookupResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BinLookupResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BinLookupResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BIN не указан или имеет неверный формат (должны быть 6/8/10 цифр).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API-ключ отсутствует, просрочен или недействителен.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Недостаточно кредитов на балансе для выполнения запроса.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Превышен rate-limit. Повторите запрос позже.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "через 42 секунды"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Сервис BIN Lookup временно недоступен.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "maintenance",
+                  "title": "Проводятся плановые работы",
+                  "message": "Выполнение запросов временно приостановлено на время плановых работ. Статус сервисов: https://atlorium.com/status",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    },
+    "/api/Bin/validate/{bin}": {
+      "get": {
+        "tags": [
+          "API BIN Lookup"
+        ],
+        "summary": "Мгновенно проверяет формат BIN/IIN (только цифры, длина 6, 8 или 10).\nПроверяет формат, а не существование такого BIN.",
+        "description": "Пример запроса:\nGET /api/bin/validate/48334884",
+        "parameters": [
+          {
+            "name": "bin",
+            "in": "path",
+            "description": "Проверяемый BIN (6, 8 или 10 цифр; пробелы/разделители игнорируются).",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Результат проверки формата (valid + длина BIN).",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BinFormatValidationResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BinFormatValidationResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BinFormatValidationResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BIN не указан.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "bad_request",
+                  "title": "Некорректный запрос",
+                  "message": "Проверьте обязательные параметры, их формат и значения по спецификации OpenAPI. Отклонённый запрос не тарифицируется.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API-ключ отсутствует, просрочен или недействителен.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "api_key_required",
+                  "title": "Нужен API-ключ",
+                  "message": "Ключ не передан или недействителен. Передайте действующий ключ в заголовке Authorization: Bearer ak_… — он создаётся в личном кабинете после регистрации. Попробовать API без регистрации можно с публичным демо-ключом ak_sandbox_demo_mockdata_v1 — запросы по нему бесплатны.",
+                  "balance": null,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Недостаточно кредитов на балансе для выполнения запроса.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "insufficient_credits",
+                  "title": "Недостаточно кредитов",
+                  "message": "На балансе не хватает кредитов для этого запроса. Пополните баланс в личном кабинете (Профиль → Баланс), чтобы продолжить.",
+                  "balance": 0.75,
+                  "retryAfterSeconds": null,
+                  "retryAfterText": null
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Превышен rate-limit. Повторите запрос позже.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "error": "rate_limited_client",
+                  "title": "Слишком много запросов",
+                  "message": "Вы превысили личный лимит запросов для этого сервиса. Лимиты восстанавливаются автоматически.",
+                  "balance": null,
+                  "retryAfterSeconds": 42,
+                  "retryAfterText": "через 42 секунды"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "title": "Ошибка API",
+        "required": [
+          "error",
+          "title",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Машинный код причины отказа. Возможные значения:\n\n* `server_error` (500) — Сервис временно недоступен\n* `unauthorized` (401) — Требуется вход\n* `api_key_required` (401) — Нужен API-ключ\n* `account_not_activated` (402) — Аккаунт не активирован\n* `rate_limited_client` (429) — Слишком много запросов\n* `rate_limited_global` (429) — Высокая нагрузка на сервис\n* `provider_keys_exhausted` (429) — Сервис временно недоступен\n* `insufficient_credits` (402) — Недостаточно кредитов\n* `guest_quota_exhausted` (402) — Бесплатный лимит на сегодня исчерпан\n* `service_disabled` (503) — Проводятся плановые работы\n* `maintenance` (503) — Проводятся плановые работы\n* `guest_not_allowed` (402) — Нужна регистрация\n* `service_not_in_account_terms` (403) — Сервис не подключён\n* `bad_request` (400) — Некорректный запрос\n* `forbidden` (403) — Доступ запрещён\n* `not_found` (404) — Ничего не найдено\n* `method_not_allowed` (405) — Метод HTTP не поддерживается\n* `unsupported_media_type` (415) — Формат запроса не поддерживается\n* `not_implemented` (501) — Режим пока не реализован",
+            "example": "insufficient_credits"
+          },
+          "title": {
+            "type": "string",
+            "description": "Короткий заголовок для интерфейса.",
+            "example": "Недостаточно кредитов"
+          },
+          "message": {
+            "type": "string",
+            "description": "Подробное объяснение: что произошло и что с этим делать. Показывается пользователю целиком."
+          },
+          "balance": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Текущий баланс в кредитах. Заполняется при 402, чтобы не делать отдельный запрос за балансом; в остальных случаях null."
+          },
+          "retryAfterSeconds": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Через сколько секунд имеет смысл повторить запрос. Дублирует HTTP-заголовок Retry-After. null — если повтор не поможет (например, кончились кредиты)."
+          },
+          "retryAfterText": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Та же задержка готовой фразой — «через 2 мин 30 с». Чтобы клиентам не приходилось самим склонять минуты и секунды."
+          }
+        },
+        "description": "Единое тело ответа для любого отказа: и для ошибки валидации, и для отсутствующего ключа, и для исчерпанного лимита. Ветвиться в коде следует по полю `error` — это стабильный машинный код. Поля `title` и `message` предназначены человеку, их формулировки могут меняться."
+      },
+      "BinFormatValidationResult": {
+        "type": "object",
+        "properties": {
+          "normalizedBin": {
+            "type": "string",
+            "description": "Нормализованный BIN: убраны пробелы и любые разделители, оставлены только цифры."
+          },
+          "isValidFormat": {
+            "type": "boolean",
+            "description": "true, если строка после нормализации состоит только из цифр и имеет допустимую длину\n(6, 8 или 10 знаков). Это проверка ФОРМАТА, а не существования BIN."
+          },
+          "binLength": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Длина нормализованного BIN в цифрах (для отображения и проверок разрядности).",
+            "format": "int32"
+          },
+          "message": {
+            "type": "string",
+            "description": "Понятное человеку пояснение результата (что не так с форматом, либо «формат корректен»)."
+          }
+        },
+        "description": "Результат проверки формата BIN/IIN: проверяется только сама строка — длина и состав\nсимволов, — а НЕ то, что такой BIN реально существует. Проверка бесплатна и мгновенна.\nЧтобы узнать, существует ли такой BIN и чей он, выполните основной запрос — он\nвозвращает карточку BinLookupResult.\n\n\nПример. Для \"48334884\": isValidFormat = true, normalizedBin =\n\"48334884\", binLength = 8."
+      },
+      "BinLookupResult": {
+        "type": "object",
+        "properties": {
+          "valid": {
+            "type": "boolean",
+            "description": "true, если переданный номер является валидным BIN/IIN и найден в справочнике.\nfalse означает, что такого BIN в базе нет (например, опечатка или несуществующий\nпрефикс) — в этом случае реквизиты карты/эмитента будут пустыми."
+          },
+          "binNumber": {
+            "type": "string",
+            "description": "Сам BIN/IIN, по которому выполнялся поиск (только цифры, 6/8/10 знаков). По числу\nцифр можно понять, на какой разрядности BIN основан результат (см. binLength)."
+          },
+          "binLength": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Длина BIN в цифрах (6, 8 или 10). Вычисляется из binNumber — разрядность\nвидна сразу, без подсчёта символов вручную.",
+            "format": "int32"
+          },
+          "cardBrand": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Платёжная система (бренд) карты: например \"VISA\", \"MASTERCARD\", \"AMERICAN EXPRESS\",\n\"MAESTRO\", \"UNIONPAY\", \"JCB\". Пусто, если бренд для BIN неизвестен."
+          },
+          "cardType": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Тип карты по способу списания средств. Возможные значения: \"DEBIT\" (дебетовая),\n\"CREDIT\" (кредитная), \"CHARGE CARD\" (карта с обязательным полным погашением).\nПусто, если тип неизвестен."
+          },
+          "cardCategory": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Категория (продукт) карты. Категорий много; самые частые: \"CLASSIC\", \"STANDARD\",\n\"BUSINESS\", \"CORPORATE\", \"GOLD\", \"PLATINUM\", \"SIGNATURE\", \"PREPAID\". Пусто, если неизвестна."
+          },
+          "country": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Полное название страны банка-эмитента (например, \"NEW ZEALAND\"). Пусто, если неизвестна."
+          },
+          "countryCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Код страны эмитента в формате ISO-3166 alpha-2 (например, \"NZ\"). Пусто, если неизвестен."
+          },
+          "countryCode3": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Код страны эмитента в формате ISO-3166 alpha-3 (например, \"NZL\"). Пусто, если неизвестен."
+          },
+          "currencyCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Код валюты страны эмитента в формате ISO-4217 (например, \"NZD\", \"USD\", \"EUR\").\nПолезно для оценки валюты, в которой, скорее всего, выпущена карта. Пусто, если неизвестен."
+          },
+          "issuer": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Название банка-эмитента карты (например, \"KIWIBANK, LTD.\"). Пусто, если неизвестно."
+          },
+          "issuerWebsite": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Сайт банка-эмитента (например, \"http://www.kiwibank.co.nz\"). Пусто, если неизвестен."
+          },
+          "issuerPhone": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Контактный телефон банка-эмитента. Пусто, если неизвестен."
+          },
+          "isCommercial": {
+            "type": "boolean",
+            "description": "true, если это коммерческая (бизнес/корпоративная) карта. Полезно при применении бизнес-правил\n(например, разные комиссии или лимиты для корпоративных карт)."
+          },
+          "isPrepaid": {
+            "type": "boolean",
+            "description": "true, если это предоплаченная (prepaid) карта."
+          },
+          "isReloadable": {
+            "type": "boolean",
+            "description": "true, если карту можно пополнять (reloadable). В основном помогает отличать\nодноразовые предоплаченные карты от пополняемых."
+          },
+          "hasCustomerIp": {
+            "type": "boolean",
+            "description": "Был ли в запросе передан IP клиента (и, соответственно, заполнен ли антифрод-блок ниже).\nЕсли false — все IP-поля носят дефолтные значения и их не нужно учитывать."
+          },
+          "ipMatchesBin": {
+            "type": "boolean",
+            "description": "true, если страна IP-адреса клиента совпадает со страной банка-эмитента карты. Несовпадение —\nодин из признаков повышенного риска (карта одной страны, а платёж идёт из другой). Имеет смысл,\nтолько когда hasCustomerIp = true."
+          },
+          "ipCountry": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Страна IP-адреса клиента (если IP был передан и определён). Иначе пусто."
+          },
+          "ipCountryCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Код страны IP клиента в формате ISO-3166 alpha-2. Иначе пусто."
+          },
+          "ipCountryCode3": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Код страны IP клиента в формате ISO-3166 alpha-3. Иначе пусто."
+          },
+          "ipRegion": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Регион IP клиента (если удалось определить). Иначе пусто."
+          },
+          "ipCity": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Город IP клиента (если удалось определить). Иначе пусто."
+          },
+          "ipBlocklisted": {
+            "type": "boolean",
+            "description": "true, если IP клиента числится в одном из списков блокировок (известные источники\nмошенничества, спама, бот-сетей, прокси и т.п.). Сильный признак риска. Имеет смысл,\nтолько когда hasCustomerIp = true."
+          },
+          "ipBlocklists": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Список конкретных списков блокировок, в которых найден IP клиента (если найден).\nПусто, если IP не передан, не в списках или их состав неизвестен."
+          },
+          "elapsedMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Время выполнения запроса в миллисекундах.",
+            "format": "int64"
+          }
+        },
+        "description": "Полная карточка результата BIN Lookup одним плоским набором полей.\nОбъединяет всё, что известно про банковский идентификационный номер:\nпризнак валидности, реквизиты карты (бренд/тип/категория), данные банка-эмитента и страны,\nа также (если был передан IP клиента) результаты дополнительных антифрод-проверок по IP.\n\n\nПример. Для BIN 48334884 в карточке будет: valid = true,\ncardBrand = \"VISA\", cardType = \"CREDIT\",\ncardCategory = \"PLATINUM\", country = \"NEW ZEALAND\",\ncountryCode = \"NZ\", issuer = \"KIWIBANK, LTD.\"."
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyBearer": {
+        "type": "http",
+        "description": "API-ключ передаётся в заголовке `Authorization: Bearer ak_…`.\n\nКлючи создаются в личном кабинете: https://atlorium.com/Account/Manage/ApiKeys\n\nЧтобы попробовать без регистрации и без списаний, вставьте демо-ключ\n`ak_sandbox_demo_mockdata_v1` — он возвращает моковые данные и помечает ответ\nзаголовком `X-Atlorium-Sandbox: true`.",
+        "scheme": "bearer",
+        "bearerFormat": "ak_…"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "API BIN Lookup",
+      "description": "Документация для API BIN Lookup (карта, банк-эмитент и страна по BIN/IIN, антифрод по IP, валидация формата BIN).",
+      "externalDocs": {
+        "description": "Попробовать в веб-интерфейсе",
+        "url": "https://atlorium.com/binGUI"
+      }
+    }
+  ],
+  "externalDocs": {
+    "description": "Описание сервиса, примеры и границы применимости",
+    "url": "https://atlorium.com/binDescription"
+  }
+}
